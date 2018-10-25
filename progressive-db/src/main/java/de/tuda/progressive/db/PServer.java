@@ -15,15 +15,6 @@ public class PServer {
 
 	private static final Logger log = LoggerFactory.getLogger(PServer.class);
 
-	public static void main(String[] args) throws Exception {
-		final String url = "jdbc:monetdb://localhost:50000";
-		final String user = "monetdb";
-		final String password = "monetdb";
-
-		PServer server = new PServer(url, user, password);
-		server.start();
-	}
-
 	private final String url;
 	private final String user;
 	private final String password;
