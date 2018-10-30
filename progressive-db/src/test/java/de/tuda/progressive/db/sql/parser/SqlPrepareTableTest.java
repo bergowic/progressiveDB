@@ -42,4 +42,10 @@ public class SqlPrepareTableTest {
 		SqlParser parser = SqlParser.create("prepare table", configBuilder.build());
 		Assertions.assertThrows(SqlParseException.class, parser::parseStmt);
 	}
+
+	@Test
+	void notEnd() {
+		SqlParser parser = SqlParser.create("prepare table foo bar", configBuilder.build());
+		Assertions.assertThrows(SqlParseException.class, parser::parseStmt);
+	}
 }
