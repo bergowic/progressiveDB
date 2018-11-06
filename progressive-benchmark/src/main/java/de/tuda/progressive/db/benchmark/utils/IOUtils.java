@@ -5,8 +5,10 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Properties;
 
 public class IOUtils {
@@ -51,6 +53,16 @@ public class IOUtils {
 			Properties properties = new Properties();
 			properties.load(input);
 			return properties;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
+		}
+	}
+
+	public static void writeCSVRow(OutputStream output, List<String> data) {
+		final String row = String.join(";", data);
+		try {
+			output.write(row.getBytes(StandardCharsets.UTF_8));
+			output.write('\n');
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}

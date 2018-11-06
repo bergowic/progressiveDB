@@ -16,4 +16,6 @@ public interface JdbcAdapter extends AutoCloseable {
 	String getPartitionTable(String table, int partition);
 
 	void analyze(String table);
+
+	String getDriverName();
 }

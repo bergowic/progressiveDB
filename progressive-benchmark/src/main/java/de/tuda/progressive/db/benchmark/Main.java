@@ -7,15 +7,22 @@ import de.tuda.progressive.db.benchmark.utils.IOUtils;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 
 public class Main {
 
 	private static final org.slf4j.Logger log = LoggerFactory.getLogger(Main.class);
+
+	private static final List<String> csvHeader = Arrays.asList("Query", "Base", "Partitions Sum", "Partitions Avg");
 
 	public static void main(String[] args) throws Throwable {
 		final Properties props = IOUtils.loadProperties(new File(args[0]));
@@ -73,6 +80,42 @@ public class Main {
 					log.info("{}", time);
 				}
 			}
+
+			final String outPath = props.getProperty("outDir");
+			if (outPath != null) {
+				File file = new File(outPath, String.format("%s-%d.csv", adapter.getDriverName(), partitionSize));
+				if (file.exists()) {
+					if (!file.delete()) {
+						log.warn("file could not be written: {}", file.getName());
+					}
+				}
+
+				if (!file.exists() && file.createNewFile()) {
+					writeCSV(file, baseTimes, partitionsTimes);
+				}
+			}
+		}
+	}
+
+	private static void writeCSV(File file, List<Benchmark.Result> baseTimes, List<Benchmark.Result> partitionsTimes) {
+		try (OutputStream output = new FileOutputStream(file)) {
+			IOUtils.writeCSVRow(output, csvHeader);
+
+			for (int i = 0; i < baseTimes.size(); i++) {
+				long baseTime = baseTimes.get(i).getTime();
+				Benchmark.Result partitionResult = partitionsTimes.get(i);
+				long partitionTime = partitionResult.getTime();
+
+				List<String> row = LongStream.of(i, baseTime, partitionTime, partitionTime / partitionResult.getTableTimes().size())
+					.mapToObj(Long::toString)
+					.collect(Collectors.toList());
+
+				IOUtils.writeCSVRow(output, row);
+			}
+
+			output.flush();
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 

@@ -50,4 +50,9 @@ public class MonetDBAdapter extends AbstractJdbcAdapter {
 	protected String escapePath(String path) {
 		return path.replace("\\", "\\\\");
 	}
+
+	@Override
+	public String getDriverName() {
+		return "monetdb";
+	}
 }

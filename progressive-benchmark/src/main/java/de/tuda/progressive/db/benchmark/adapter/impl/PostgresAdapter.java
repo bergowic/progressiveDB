@@ -47,4 +47,9 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	protected String escapePath(String path) {
 		return path;
 	}
+
+	@Override
+	public String getDriverName() {
+		return "postgresql";
+	}
 }
