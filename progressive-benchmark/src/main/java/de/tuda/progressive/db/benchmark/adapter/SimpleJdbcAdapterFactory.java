@@ -1,5 +1,6 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
+import de.tuda.progressive.db.benchmark.adapter.impl.MonetDBAdapter;
 import de.tuda.progressive.db.benchmark.adapter.impl.PostgresAdapter;
 
 public class SimpleJdbcAdapterFactory implements JdbcAdapterFactory {
@@ -12,6 +13,8 @@ public class SimpleJdbcAdapterFactory implements JdbcAdapterFactory {
 		switch (driver.toUpperCase()) {
 			case "POSTGRESQL":
 				return new PostgresAdapter(url);
+			case "MONETDB":
+				return new MonetDBAdapter(url);
 		}
 
 		throw new IllegalArgumentException("driver not supported: " + driver);

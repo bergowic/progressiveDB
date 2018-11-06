@@ -26,7 +26,7 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	@Override
 	public void splitTable(String table, int partitions) {
 		final String tmpTable = String.format("%s_tmp", table);
-		createTable(tmpTable, PART_COLUMN_DEF, PART_DEF);
+		createTable(tmpTable, PART_COLUMN_DEF, "", PART_DEF);
 
 		for (int i = 0; i < partitions; i++) {
 			final String partitionName = getPartitionTable(table, i);
@@ -41,5 +41,10 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	@Override
 	public void analyze(String table) {
 		execute(ANALYZE_TPL, table);
+	}
+
+	@Override
+	protected String escapePath(String path) {
+		return path;
 	}
 }

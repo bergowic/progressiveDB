@@ -41,18 +41,26 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 
 	@Override
 	public void createTable(String table) {
-		createTable(table, Collections.emptyList(), "");
+		createTable(table, Collections.emptyList());
 	}
 
 	protected final void dropTable(String table) {
 		execute(DROP_SQL, table);
 	}
 
-	protected final void createTable(String table, String column, String suffix) {
-		createTable(table, Collections.singletonList(column), suffix);
+	protected final void createTable(String table, String column) {
+		createTable(table, Collections.singletonList(column));
 	}
 
-	protected final void createTable(String table, List<String> columns, String suffix) {
+	protected final void createTable(String table, List<String> columns) {
+		createTable(table, columns, "", "");
+	}
+
+	protected final void createTable(String table, String column, String prefix, String suffix) {
+		createTable(table, Collections.singletonList(column), prefix, suffix);
+	}
+
+	protected final void createTable(String table, List<String> columns, String prefix, String suffix) {
 		final String fileName = String.format("/%s", TABLE_FILE);
 
 		try (InputStream input = getClass().getResourceAsStream(fileName)) {
@@ -60,7 +68,7 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 			final String columnsDefinition = getColumnsDefinition(columns);
 
 			dropTable(table);
-			execute(sql, table, columnsDefinition, suffix);
+			execute(sql, prefix, table, columnsDefinition, suffix);
 		} catch (IOException e) {
 			throw new UncheckedIOException(e);
 		}
@@ -73,9 +81,11 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 		return String.format(", %s", String.join(", ", columns));
 	}
 
+	protected abstract String escapePath(String path);
+
 	@Override
 	public void copy(String table, File file) {
-		execute(getCopyTemplate(), table, file.getAbsolutePath());
+		execute(getCopyTemplate(), table, escapePath(file.getAbsolutePath()));
 	}
 
 	@Override

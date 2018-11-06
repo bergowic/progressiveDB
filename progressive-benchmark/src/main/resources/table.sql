@@ -1,4 +1,4 @@
-create table %s (
+create %s table %s (
   lo_orderkey        integer     not null,
   lo_linenumber      integer     not null,
   c_name             varchar(25) not null,
