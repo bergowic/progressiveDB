@@ -48,7 +48,7 @@ public class Main {
 			log.info("create {} partitions with size: {}", partitions, partitionSize);
 
 			log.info("execute base benchmarks");
-			List<Long> baseTimes = benchmark.run(adapter, table, queries);
+			List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, queries);
 			log.info("benchmarks executed");
 
 			log.info("split table");
@@ -60,15 +60,18 @@ public class Main {
 					.collect(Collectors.toList());
 
 			log.info("execute partitions benchmarks");
-			List<Long> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
+			List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
 			log.info("benchmarks executed");
 
 			for (int i = 0; i < queries.size(); i++) {
-				long partitionsTime = partitionsTimes.get(i);
+				long partitionsTime = partitionsTimes.get(i).getTime();
 
-				log.info("query-{}: base table took {}ms", i, baseTimes.get(i));
+				log.info("query-{}: base table took {}ms", i, baseTimes.get(i).getTime());
 				log.info("query-{}: partitions tables took {}ms", i, partitionsTime);
 				log.info("query-{}: partitions tables took in average {}ms", i, partitionsTime / partitions);
+				for (Long time : partitionsTimes.get(i).getTableTimes()) {
+					log.info("{}", time);
+				}
 			}
 		}
 	}

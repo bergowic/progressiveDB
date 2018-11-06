@@ -8,14 +8,19 @@ import java.util.List;
 public class SimpleBenchmark implements Benchmark {
 
 	@Override
-	public List<Long> run(JdbcAdapter adapter, List<String> tables, List<String> queries) {
-		List<Long> results = new ArrayList<>(queries.size());
+	public List<Result> run(JdbcAdapter adapter, List<String> tables, List<String> queries) {
+		List<Result> results = new ArrayList<>(queries.size());
 		for (String query : queries) {
-			long time = 0;
+			List<Long> times = new ArrayList<>(tables.size());
+			long timeSum = 0;
 			for (String table : tables) {
-				time += run(adapter, table, query);
+				long time = run(adapter, table, query);
+				timeSum += time;
+				times.add(time);
 			}
-			results.add(time);
+
+			Result result = new Result(timeSum, times);
+			results.add(result);
 		}
 		return results;
 	}
