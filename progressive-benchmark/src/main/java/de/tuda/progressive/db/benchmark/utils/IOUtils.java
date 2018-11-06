@@ -7,8 +7,12 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 
 public class IOUtils {
+
+	private IOUtils() {
+	}
 
 	public static String read(InputStream input) {
 		ByteArrayOutputStream result = new ByteArrayOutputStream();
@@ -39,6 +43,16 @@ public class IOUtils {
 			} catch (Exception e) {
 				// do nothing
 			}
+		}
+	}
+
+	public static Properties loadProperties(File file) {
+		try (InputStream input = new FileInputStream(file)) {
+			Properties properties = new Properties();
+			properties.load(input);
+			return properties;
+		} catch (IOException e) {
+			throw new UncheckedIOException(e);
 		}
 	}
 }

@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Properties;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -16,12 +17,14 @@ public class Main {
 	private static final org.slf4j.Logger log = LoggerFactory.getLogger(Main.class);
 
 	public static void main(String[] args) throws Throwable {
-		final String table = "lineorder_full";
-		final int partitionSize = 1000000;
-		final File dataDir = new File(args[0]);
-		final List<String> queries = loadQueries(new File(args[1]));
-		final String url = args[2];
+		final Properties props = IOUtils.loadProperties(new File(args[0]));
 		final Benchmark benchmark = new SimpleBenchmark();
+
+		final String table = props.getProperty("table", "lineorder_full");
+		final int partitionSize = Integer.parseInt(props.getProperty("partitionSize", "1000000"));
+		final File dataDir = new File(props.getProperty("dataDir"));
+		final List<String> queries = loadQueries(new File(props.getProperty("queriesDir")));
+		final String url = props.getProperty("url");
 
 		try (JdbcAdapter adapter = new PostgresAdapter(url)) {
 			adapter.createTable(table);
