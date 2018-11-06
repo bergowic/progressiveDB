@@ -2,14 +2,13 @@ package de.tuda.progressive.db.benchmark;
 
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapter;
 
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 public class SimpleBenchmark implements Benchmark {
 
 	@Override
-	public List<Long> run(JdbcAdapter adapter, List<String> tables, List<String> queries) throws SQLException {
+	public List<Long> run(JdbcAdapter adapter, List<String> tables, List<String> queries) {
 		List<Long> results = new ArrayList<>(queries.size());
 		for (String query : queries) {
 			long time = 0;
@@ -21,7 +20,7 @@ public class SimpleBenchmark implements Benchmark {
 		return results;
 	}
 
-	private long run(JdbcAdapter adapter, String table, String query) throws SQLException {
+	private long run(JdbcAdapter adapter, String table, String query) {
 		long start = System.nanoTime();
 		adapter.benchmark(table, query);
 		long end = System.nanoTime();

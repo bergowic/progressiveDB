@@ -1,7 +1,8 @@
 package de.tuda.progressive.db.benchmark;
 
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapter;
-import de.tuda.progressive.db.benchmark.adapter.impl.PostgresAdapter;
+import de.tuda.progressive.db.benchmark.adapter.JdbcAdapterFactory;
+import de.tuda.progressive.db.benchmark.adapter.SimpleJdbcAdapterFactory;
 import de.tuda.progressive.db.benchmark.utils.IOUtils;
 import org.slf4j.LoggerFactory;
 
@@ -19,6 +20,7 @@ public class Main {
 	public static void main(String[] args) throws Throwable {
 		final Properties props = IOUtils.loadProperties(new File(args[0]));
 		final Benchmark benchmark = new SimpleBenchmark();
+		final JdbcAdapterFactory factory = new SimpleJdbcAdapterFactory();
 
 		final String table = props.getProperty("table", "lineorder_full");
 		final int partitionSize = Integer.parseInt(props.getProperty("partitionSize", "1000000"));
@@ -26,7 +28,7 @@ public class Main {
 		final List<String> queries = loadQueries(new File(props.getProperty("queriesDir")));
 		final String url = props.getProperty("url");
 
-		try (JdbcAdapter adapter = new PostgresAdapter(url)) {
+		try (JdbcAdapter adapter = factory.create(url)) {
 			adapter.createTable(table);
 
 			log.info("loading data");

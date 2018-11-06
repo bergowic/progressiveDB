@@ -2,8 +2,6 @@ package de.tuda.progressive.db.benchmark.adapter.impl;
 
 import de.tuda.progressive.db.benchmark.adapter.AbstractJdbcAdapter;
 
-import java.sql.SQLException;
-
 public class PostgresAdapter extends AbstractJdbcAdapter {
 
 	private static final String PART_COLUMN_NAME = "id";
@@ -16,7 +14,7 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	private static final String INSERT_FROM_TPL = "insert into %s select * from %s";
 
 
-	public PostgresAdapter(String url) throws SQLException {
+	public PostgresAdapter(String url) {
 		super(url);
 	}
 
@@ -26,7 +24,7 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	}
 
 	@Override
-	public void splitTable(String table, int partitions) throws SQLException {
+	public void splitTable(String table, int partitions) {
 		final String tmpTable = String.format("%s_tmp", table);
 		createTable(tmpTable, PART_COLUMN_DEF, PART_DEF);
 
@@ -41,7 +39,7 @@ public class PostgresAdapter extends AbstractJdbcAdapter {
 	}
 
 	@Override
-	public void analyze(String table) throws SQLException {
+	public void analyze(String table) {
 		execute(ANALYZE_TPL, table);
 	}
 }

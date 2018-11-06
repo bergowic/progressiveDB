@@ -1,20 +1,19 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
 import java.io.File;
-import java.sql.SQLException;
 
 public interface JdbcAdapter extends AutoCloseable {
-	void createTable(String table) throws SQLException;
+	void createTable(String table);
 
-	void splitTable(String table, int partitions) throws SQLException;
+	void splitTable(String table, int partitions);
 
-	void copy(String table, File file) throws SQLException;
+	void copy(String table, File file);
 
-	int getCount(String table) throws SQLException;
+	int getCount(String table);
 
-	void benchmark(String table, String query) throws SQLException;
+	void benchmark(String table, String query);
 
 	String getPartitionTable(String table, int partition);
 
-	void analyze(String table) throws SQLException;
+	void analyze(String table);
 }
