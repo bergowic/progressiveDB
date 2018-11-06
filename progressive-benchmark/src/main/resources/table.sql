@@ -64,4 +64,5 @@ create table %s (
   d_commit_holidayfl        integer     not null,
   d_commit_weekdayfl        integer     not null,
   lo_shipmode        varchar(10) not null
-);
+  %s
+) %s;

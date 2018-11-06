@@ -1,21 +1,24 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
-import java.io.BufferedReader;
+import de.tuda.progressive.db.benchmark.utils.IOUtils;
+
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.stream.Collectors;
+import java.util.Collections;
+import java.util.List;
 
 public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 
 	private static final String TABLE_FILE = "table.sql";
 
+	private static final String COUNT_SQL = "select count(*) from %s";
 	private static final String DROP_SQL = "drop table if exists %s";
 
 	private final Connection connection;
@@ -26,29 +29,43 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 
 	@Override
 	public void close() {
-		if (connection != null) {
-			try {
-				connection.close();
-			} catch (SQLException e) {
-				// do nothing
-			}
-		}
+		IOUtils.closeSafe(connection);
 	}
 
 	protected abstract String getCopyTemplate();
 
 	@Override
 	public void createTable(String table) throws SQLException {
+		createTable(table, Collections.emptyList(), "");
+	}
+
+	protected final void dropTable(String table) throws SQLException {
+		execute(DROP_SQL, table);
+	}
+
+	protected final void createTable(String table, String column, String suffix) throws SQLException {
+		createTable(table, Collections.singletonList(column), suffix);
+	}
+
+	protected final void createTable(String table, List<String> columns, String suffix) throws SQLException {
 		final String fileName = String.format("/%s", TABLE_FILE);
 
 		try (InputStream input = getClass().getResourceAsStream(fileName)) {
-			final String sql = loadSql(input);
+			final String sql = IOUtils.read(input);
+			final String columnsDefinition = getColumnsDefinition(columns);
 
-			execute(DROP_SQL, table);
-			execute(sql, table);
+			dropTable(table);
+			execute(sql, table, columnsDefinition, suffix);
 		} catch (IOException e) {
-			throw new IllegalStateException("could not load table definition", e);
+			throw new UncheckedIOException(e);
 		}
+	}
+
+	private String getColumnsDefinition(List<String> columns) {
+		if (columns.size() == 0) {
+			return "";
+		}
+		return String.format(", %s", String.join(", ", columns));
 	}
 
 	@Override
@@ -57,28 +74,29 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 	}
 
 	@Override
-	public void benchmark(String table, File file) throws SQLException {
-		final String sql = loadSql(file);
-		execute(sql, table);
+	public int getCount(String table) throws SQLException {
+		try (Statement statement = connection.createStatement()) {
+			final String sql = String.format(COUNT_SQL, table);
+			ResultSet result = statement.executeQuery(sql);
+			result.next();
+			return result.getInt(1);
+		}
 	}
 
-	private void execute(String template, String... args) throws SQLException {
+	@Override
+	public void benchmark(String table, String query) throws SQLException {
+		execute(query, table);
+	}
+
+	protected final void execute(String template, Object... args) throws SQLException {
 		try (Statement statement = connection.createStatement()) {
 			final String sql = String.format(template, args);
 			statement.execute(sql);
 		}
 	}
 
-	private String loadSql(InputStream input) {
-		return new BufferedReader(new InputStreamReader(input))
-				.lines().collect(Collectors.joining("\n"));
-	}
-
-	private String loadSql(File file) {
-		try (InputStream input = new FileInputStream(file)) {
-			return loadSql(input);
-		} catch (IOException e) {
-			throw new IllegalArgumentException("could not read file", e);
-		}
+	@Override
+	public String getPartitionTable(String table, int partition) {
+		return String.format("%s_%d", table, partition);
 	}
 }
