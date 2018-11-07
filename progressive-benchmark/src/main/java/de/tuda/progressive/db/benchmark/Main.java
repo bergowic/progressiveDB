@@ -31,23 +31,25 @@ public class Main {
 
 		final String table = props.getProperty("table", "lineorder_full");
 		final int partitionSize = Integer.parseInt(props.getProperty("partitionSize", "1000000"));
-		final File dataDir = new File(props.getProperty("dataDir"));
+		final String dataPath = props.getProperty("dataDir");
 		final List<String> queries = loadQueries(new File(props.getProperty("queriesDir")));
 		final String url = props.getProperty("url");
 
 		try (JdbcAdapter adapter = factory.create(url)) {
-			adapter.createTable(table);
+			if (dataPath != null) {
+				adapter.createTable(table);
+				
+				log.info("loading data");
+				for (File file : new File(dataPath).listFiles()) {
+					log.info("load file: {}", file.getName());
+					adapter.copy(table, file);
+				}
+				log.info("data loaded");
 
-			log.info("loading data");
-			for (File file : dataDir.listFiles()) {
-				log.info("load file: {}", file.getName());
-				adapter.copy(table, file);
+				log.info("analyze table");
+				adapter.analyze(table);
+				log.info("table analyzed");
 			}
-			log.info("data loaded");
-
-			log.info("analyze table");
-			adapter.analyze(table);
-			log.info("table analyzed");
 
 			final int count = adapter.getCount(table);
 			final int partitions = (int) Math.ceil(((double) count / (double) partitionSize));
