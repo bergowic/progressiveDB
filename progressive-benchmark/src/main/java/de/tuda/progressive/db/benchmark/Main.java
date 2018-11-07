@@ -30,7 +30,7 @@ public class Main {
 		final JdbcAdapterFactory factory = new SimpleJdbcAdapterFactory();
 
 		final String table = props.getProperty("table", "lineorder_full");
-		final int partitionSize = Integer.parseInt(props.getProperty("partitionSize", "1000000"));
+		final List<Integer> partitionSizes = getPartitionSizes(props.getProperty("partitionSize"));
 		final String dataPath = props.getProperty("dataDir");
 		final List<String> queries = loadQueries(new File(props.getProperty("queriesDir")));
 		final String url = props.getProperty("url");
@@ -38,7 +38,7 @@ public class Main {
 		try (JdbcAdapter adapter = factory.create(url)) {
 			if (dataPath != null) {
 				adapter.createTable(table);
-				
+
 				log.info("loading data");
 				for (File file : new File(dataPath).listFiles()) {
 					log.info("load file: {}", file.getName());
@@ -52,48 +52,51 @@ public class Main {
 			}
 
 			final int count = adapter.getCount(table);
-			final int partitions = (int) Math.ceil(((double) count / (double) partitionSize));
-			log.info("table contains {} entries", count);
-			log.info("create {} partitions with size: {}", partitions, partitionSize);
 
-			log.info("execute base benchmarks");
-			List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, queries);
-			log.info("benchmarks executed");
+			for (int partitionSize : partitionSizes) {
+				final int partitions = (int) Math.ceil(((double) count / (double) partitionSize));
+				log.info("table contains {} entries", count);
+				log.info("create {} partitions with size: {}", partitions, partitionSize);
 
-			log.info("split table");
-			adapter.splitTable(table, partitions);
-			log.info("table split");
+				log.info("execute base benchmarks");
+				List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, queries);
+				log.info("benchmarks executed");
 
-			List<String> partitionTables = IntStream.range(0, partitions)
-					.mapToObj(i -> adapter.getPartitionTable(table, i))
-					.collect(Collectors.toList());
+				log.info("split table");
+				adapter.splitTable(table, partitions);
+				log.info("table split");
 
-			log.info("execute partitions benchmarks");
-			List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
-			log.info("benchmarks executed");
+				List<String> partitionTables = IntStream.range(0, partitions)
+						.mapToObj(i -> adapter.getPartitionTable(table, i))
+						.collect(Collectors.toList());
 
-			for (int i = 0; i < queries.size(); i++) {
-				long partitionsTime = partitionsTimes.get(i).getTime();
+				log.info("execute partitions benchmarks");
+				List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
+				log.info("benchmarks executed");
 
-				log.info("query-{}: base table took {}ms", i, baseTimes.get(i).getTime());
-				log.info("query-{}: partitions tables took {}ms", i, partitionsTime);
-				log.info("query-{}: partitions tables took in average {}ms", i, partitionsTime / partitions);
-				for (Long time : partitionsTimes.get(i).getTableTimes()) {
-					log.info("{}", time);
-				}
-			}
+				for (int i = 0; i < queries.size(); i++) {
+					long partitionsTime = partitionsTimes.get(i).getTime();
 
-			final String outPath = props.getProperty("outDir");
-			if (outPath != null) {
-				File file = new File(outPath, String.format("%s-%d.csv", adapter.getDriverName(), partitionSize));
-				if (file.exists()) {
-					if (!file.delete()) {
-						log.warn("file could not be written: {}", file.getName());
+					log.info("query-{}: base table took {}ms", i, baseTimes.get(i).getTime());
+					log.info("query-{}: partitions tables took {}ms", i, partitionsTime);
+					log.info("query-{}: partitions tables took in average {}ms", i, partitionsTime / partitions);
+					for (Long time : partitionsTimes.get(i).getTableTimes()) {
+						log.info("{}", time);
 					}
 				}
 
-				if (!file.exists() && file.createNewFile()) {
-					writeCSV(file, baseTimes, partitionsTimes);
+				final String outPath = props.getProperty("outDir");
+				if (outPath != null) {
+					File file = new File(outPath, String.format("%s-%d.csv", adapter.getDriverName(), partitionSize));
+					if (file.exists()) {
+						if (!file.delete()) {
+							log.warn("file could not be written: {}", file.getName());
+						}
+					}
+
+					if (!file.exists() && file.createNewFile()) {
+						writeCSV(file, baseTimes, partitionsTimes);
+					}
 				}
 			}
 		}
@@ -124,6 +127,12 @@ public class Main {
 	private static List<String> loadQueries(File dir) {
 		return Arrays.stream(dir.listFiles())
 				.map(IOUtils::read)
+				.collect(Collectors.toList());
+	}
+
+	private static List<Integer> getPartitionSizes(String value) {
+		return Arrays.stream(value.split(","))
+				.map(Integer::parseInt)
 				.collect(Collectors.toList());
 	}
 }
