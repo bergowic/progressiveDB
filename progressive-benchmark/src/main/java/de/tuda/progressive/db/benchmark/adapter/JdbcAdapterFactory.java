@@ -1,5 +1,9 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
 public interface JdbcAdapterFactory {
-	JdbcAdapter create(String url);
+	default JdbcAdapter create(String url) {
+		return create(url, null);
+	}
+
+	JdbcAdapter create(String url, String type);
 }

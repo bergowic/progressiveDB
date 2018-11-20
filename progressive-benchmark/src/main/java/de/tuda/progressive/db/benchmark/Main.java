@@ -34,8 +34,9 @@ public class Main {
 		final String dataPath = props.getProperty("dataDir");
 		final List<String> queries = loadQueries(new File(props.getProperty("queriesDir")));
 		final String url = props.getProperty("url");
+		final String type = props.getProperty("type");
 
-		try (JdbcAdapter adapter = factory.create(url)) {
+		try (JdbcAdapter adapter = factory.create(url, type)) {
 			if (dataPath != null) {
 				adapter.createTable(table);
 
