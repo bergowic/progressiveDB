@@ -9,7 +9,7 @@ public interface Benchmark {
 
 	List<Result> run(JdbcAdapter adapter, String table, int partitions, List<String> queries);
 
-	class Result {
+	class Result implements Comparable<Result> {
 		private final long time;
 		private final List<Long> tableTimes;
 
@@ -24,6 +24,18 @@ public interface Benchmark {
 
 		public List<Long> getTableTimes() {
 			return tableTimes;
+		}
+
+		@Override
+		public int compareTo(Result o) {
+			long compare = time - o.time;
+			if (compare > 0) {
+				return 1;
+			}
+			if (compare < 0) {
+				return -1;
+			}
+			return 0;
 		}
 	}
 }

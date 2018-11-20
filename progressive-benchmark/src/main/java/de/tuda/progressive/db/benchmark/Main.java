@@ -54,14 +54,13 @@ public class Main {
 			final int count = adapter.getCount(table);
 
 			for (int partitionSize : partitionSizes) {
-				final int partitions = (int) Math.ceil(((double) count / (double) partitionSize));
-				log.info("table contains {} entries", count);
-				log.info("create {} partitions with size: {}", partitions, partitionSize);
-
 				log.info("execute base benchmarks");
 				List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, 0, queries);
 				log.info("benchmarks executed");
 
+				final int partitions = (int) Math.ceil(((double) count / (double) partitionSize));
+				log.info("table contains {} entries", count);
+				log.info("create {} partitions with size: {}", partitions, partitionSize);
 				log.info("split table");
 				adapter.splitTable(table, partitions);
 				log.info("table split");
