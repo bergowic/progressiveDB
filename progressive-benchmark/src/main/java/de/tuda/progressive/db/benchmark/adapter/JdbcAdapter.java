@@ -7,6 +7,8 @@ public interface JdbcAdapter extends AutoCloseable {
 
 	void splitTable(String table, int partitions);
 
+	void cleanup(String table, int partitions);
+
 	void copy(String table, File file);
 
 	int getCount(String table);

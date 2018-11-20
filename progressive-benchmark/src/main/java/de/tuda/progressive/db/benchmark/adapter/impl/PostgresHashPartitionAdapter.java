@@ -27,4 +27,10 @@ public class PostgresHashPartitionAdapter extends AbstractPostgresAdapter {
 		execute(INSERT_FROM_TPL, tmpTable, table);
 		analyze(tmpTable);
 	}
+
+	@Override
+	public void cleanup(String table, int partitions) {
+		final String tmpTable = getTmpTable(table);
+		dropTable(tmpTable);
+	}
 }

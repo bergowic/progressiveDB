@@ -38,4 +38,12 @@ public class PostgresRangePartitionAdapter extends AbstractPostgresAdapter {
 		execute(INSERT_FROM_TPL, tmpTable, partitions, table);
 		analyze(tmpTable);
 	}
+
+	@Override
+	public void cleanup(String table, int partitions) {
+		final String tmpTable = getTmpTable(table);
+
+		execute(DROP_AUTO_COLUMN, table);
+		dropTable(tmpTable);
+	}
 }

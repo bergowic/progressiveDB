@@ -1,6 +1,7 @@
 package de.tuda.progressive.db.benchmark.adapter.impl;
 
 import de.tuda.progressive.db.benchmark.adapter.AbstractJdbcAdapter;
+import de.tuda.progressive.db.benchmark.utils.AdapterUtils;
 
 public class MonetDBAdapter extends AbstractJdbcAdapter {
 
@@ -39,6 +40,12 @@ public class MonetDBAdapter extends AbstractJdbcAdapter {
 			analyze(partitionName);
 		}
 		dropTable(tmpTable);
+	}
+
+	@Override
+	public void cleanup(String table, int partitions) {
+		AdapterUtils.getPartitionTables(this, table, partitions)
+				.forEach(this::dropTable);
 	}
 
 	@Override

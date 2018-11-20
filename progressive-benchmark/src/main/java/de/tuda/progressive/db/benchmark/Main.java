@@ -3,6 +3,7 @@ package de.tuda.progressive.db.benchmark;
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapter;
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapterFactory;
 import de.tuda.progressive.db.benchmark.adapter.SimpleJdbcAdapterFactory;
+import de.tuda.progressive.db.benchmark.utils.AdapterUtils;
 import de.tuda.progressive.db.benchmark.utils.IOUtils;
 import org.slf4j.LoggerFactory;
 
@@ -67,9 +68,7 @@ public class Main {
 				adapter.splitTable(table, partitions);
 				log.info("table split");
 
-				List<String> partitionTables = IntStream.range(0, partitions)
-						.mapToObj(i -> adapter.getPartitionTable(table, i))
-						.collect(Collectors.toList());
+				List<String> partitionTables = AdapterUtils.getPartitionTables(adapter, table, partitions);
 
 				log.info("execute partitions benchmarks");
 				List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
@@ -99,6 +98,8 @@ public class Main {
 						writeCSV(file, baseTimes, partitionsTimes);
 					}
 				}
+
+				adapter.cleanup(table, partitions);
 			}
 		}
 	}
