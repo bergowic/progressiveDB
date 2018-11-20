@@ -9,6 +9,7 @@ WHERE
   AND s_region = 'AMERICA'
   AND (p_mfgr = 'MFGR#1'
     OR p_mfgr = 'MFGR#2')
+  %s
 GROUP BY 
   d_order_year,
   c_nation

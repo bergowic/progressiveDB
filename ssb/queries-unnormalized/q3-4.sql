@@ -11,6 +11,7 @@ WHERE
   AND (s_city='UNITED KI1'
     OR s_city='UNITED KI5')
   AND d_order_yearmonth = 'Dec1997'
+  %s
 GROUP BY 
   c_city,
   s_city,

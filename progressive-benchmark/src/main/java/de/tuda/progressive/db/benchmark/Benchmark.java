@@ -7,11 +7,7 @@ import java.util.List;
 
 public interface Benchmark {
 
-	default List<Result> run(JdbcAdapter adapter, String table, List<String> queries) {
-		return run(adapter, Collections.singletonList(table), queries);
-	}
-
-	List<Result> run(JdbcAdapter adapter, List<String> tables, List<String> queries);
+	List<Result> run(JdbcAdapter adapter, String table, int partitions, List<String> queries);
 
 	class Result {
 		private final long time;

@@ -3,7 +3,6 @@ package de.tuda.progressive.db.benchmark;
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapter;
 import de.tuda.progressive.db.benchmark.adapter.JdbcAdapterFactory;
 import de.tuda.progressive.db.benchmark.adapter.SimpleJdbcAdapterFactory;
-import de.tuda.progressive.db.benchmark.utils.AdapterUtils;
 import de.tuda.progressive.db.benchmark.utils.IOUtils;
 import org.slf4j.LoggerFactory;
 
@@ -16,7 +15,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.LongStream;
 
 public class Main {
@@ -61,25 +59,26 @@ public class Main {
 				log.info("create {} partitions with size: {}", partitions, partitionSize);
 
 				log.info("execute base benchmarks");
-				List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, queries);
+				List<Benchmark.Result> baseTimes = benchmark.run(adapter, table, 0, queries);
 				log.info("benchmarks executed");
 
 				log.info("split table");
 				adapter.splitTable(table, partitions);
 				log.info("table split");
 
-				List<String> partitionTables = AdapterUtils.getPartitionTables(adapter, table, partitions);
-
 				log.info("execute partitions benchmarks");
-				List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, partitionTables, queries);
+				List<Benchmark.Result> partitionsTimes = benchmark.run(adapter, table, partitions, queries);
 				log.info("benchmarks executed");
 
 				for (int i = 0; i < queries.size(); i++) {
-					long partitionsTime = partitionsTimes.get(i).getTime();
+					Benchmark.Result result = partitionsTimes.get(i);
+					long partitionsTime = result.getTime();
+					long tableTimes = result.getTableTimes().stream().mapToLong(Long::longValue).sum();
 
 					log.info("query-{}: base table took {}ms", i, baseTimes.get(i).getTime());
 					log.info("query-{}: partitions tables took {}ms", i, partitionsTime);
 					log.info("query-{}: partitions tables took in average {}ms", i, partitionsTime / partitions);
+					log.info("query-{}: partitions tables took individual in average {}ms", i, tableTimes / partitions);
 					for (Long time : partitionsTimes.get(i).getTableTimes()) {
 						log.info("{}", time);
 					}
@@ -114,8 +113,8 @@ public class Main {
 				long partitionTime = partitionResult.getTime();
 
 				List<String> row = LongStream.of(i, baseTime, partitionTime, partitionTime / partitionResult.getTableTimes().size())
-					.mapToObj(Long::toString)
-					.collect(Collectors.toList());
+						.mapToObj(Long::toString)
+						.collect(Collectors.toList());
 
 				IOUtils.writeCSVRow(output, row);
 			}

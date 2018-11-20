@@ -1,5 +1,7 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
+import de.tuda.progressive.db.benchmark.Benchmark;
+
 import java.io.File;
 
 public interface JdbcAdapter extends AutoCloseable {
@@ -13,7 +15,7 @@ public interface JdbcAdapter extends AutoCloseable {
 
 	int getCount(String table);
 
-	void benchmark(String table, String query);
+	Benchmark.Result benchmark(String table, int partitions, String query);
 
 	String getPartitionTable(String table, int partition);
 

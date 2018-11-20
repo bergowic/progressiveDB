@@ -12,6 +12,7 @@ WHERE
     OR s_city='UNITED KI5')
   AND d_order_year >= 1992
   AND d_order_year <= 1997
+  %s
 GROUP BY 
   c_city,
   s_city,

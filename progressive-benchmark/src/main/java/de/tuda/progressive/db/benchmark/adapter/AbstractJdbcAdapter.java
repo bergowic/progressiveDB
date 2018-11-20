@@ -1,5 +1,8 @@
 package de.tuda.progressive.db.benchmark.adapter;
 
+import de.tuda.progressive.db.benchmark.Benchmark;
+import de.tuda.progressive.db.benchmark.utils.AdapterUtils;
+import de.tuda.progressive.db.benchmark.utils.BenchmarkUtils;
 import de.tuda.progressive.db.benchmark.utils.IOUtils;
 import de.tuda.progressive.db.benchmark.utils.UncheckedSQLException;
 
@@ -9,9 +12,11 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -100,9 +105,42 @@ public abstract class AbstractJdbcAdapter implements JdbcAdapter {
 		}
 	}
 
+	protected final long benchmark(String table, String query) {
+		return BenchmarkUtils.measure(() -> {
+			try (Statement statement = connection.createStatement()) {
+				final String sql = String.format(query, table, "");
+				try (ResultSet result = statement.executeQuery(sql)) {
+					while (result.next()) {
+						// just fetch the data
+					}
+				}
+			}
+		});
+	}
+
 	@Override
-	public void benchmark(String table, String query) {
-		execute(query, table);
+	public Benchmark.Result benchmark(String table, int partitions, String query) {
+		if (partitions < 1) {
+			final long time = benchmark(table, query);
+			return new Benchmark.Result(time, Collections.singletonList(time));
+		}
+
+		final List<Long> times = new ArrayList<>(partitions);
+		final long total = BenchmarkUtils.measure(() -> {
+			AdapterUtils.getPartitionTables(this, table, partitions).stream()
+					.map(t -> benchmark(t, query))
+					.forEach(times::add);
+		});
+
+		return new Benchmark.Result(total, times);
+	}
+
+	protected final PreparedStatement prepare(String sql) {
+		try {
+			return connection.prepareStatement(sql);
+		} catch (SQLException e) {
+			throw new UncheckedSQLException(e);
+		}
 	}
 
 	protected final void execute(String template, Object... args) {

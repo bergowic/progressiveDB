@@ -12,6 +12,7 @@ WHERE
     OR d_order_year = 1998)
   AND (p_mfgr = 'MFGR#1'
     OR p_mfgr = 'MFGR#2')
+  %s
 GROUP BY 
   d_order_year,
   s_nation,

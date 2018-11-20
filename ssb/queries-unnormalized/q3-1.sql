@@ -10,6 +10,7 @@ WHERE
   AND s_region = 'ASIA'
   AND d_order_year >= 1992
   AND d_order_year <= 1997
+  %s
 GROUP BY 
   c_nation,
   s_nation,

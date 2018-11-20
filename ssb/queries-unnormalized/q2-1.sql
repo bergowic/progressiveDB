@@ -7,6 +7,7 @@ FROM
 WHERE 
   p_category = 'MFGR#12'
   AND s_region = 'AMERICA'
+  %s
 GROUP BY 
   d_order_year,
   p_brand1

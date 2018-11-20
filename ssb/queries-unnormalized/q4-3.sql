@@ -11,6 +11,7 @@ WHERE
   AND (d_order_year = 1997
     OR d_order_year = 1998)
   AND p_category = 'MFGR#14'
+  %s
 GROUP BY 
   d_order_year,
   s_city,
