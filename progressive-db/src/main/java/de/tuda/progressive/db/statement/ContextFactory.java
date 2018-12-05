@@ -273,7 +273,7 @@ public class ContextFactory {
 						break;
 					case AVG:
 						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(i + 2), SqlParserPos.ZERO);
-						columns.add(creatAvgAggregation(index, column, nextColumn));
+						columns.add(creatAvgAggregation(column, nextColumn));
 						i += 2;
 						++index;
 						break;
@@ -312,10 +312,10 @@ public class ContextFactory {
 		);
 	}
 
-	private static SqlBasicCall creatAvgAggregation(int index, SqlNode operand1, SqlNode operand2) {
+	private static SqlBasicCall creatAvgAggregation(SqlNode operand1, SqlNode operand2) {
 		return new SqlBasicCall(
 				SqlStdOperatorTable.DIVIDE,
-				new SqlNode[]{createSumAggregation(operand1), createCountAggregation(operand2)},
+				new SqlNode[]{createSumAggregation(operand1), createSumAggregation(operand2)},
 				SqlParserPos.ZERO);
 	}
 
@@ -328,7 +328,7 @@ public class ContextFactory {
 	}
 
 	private static SqlBasicCall createCountPercentAggregation(int index, SqlNode operand) {
-		return createPercentAggregation(index, createCountAggregation(operand));
+		return createPercentAggregation(index, createSumAggregation(operand));
 	}
 
 	private static SqlBasicCall createSumAggregation(SqlNode... operands) {

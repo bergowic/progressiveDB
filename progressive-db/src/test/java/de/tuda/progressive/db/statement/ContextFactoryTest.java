@@ -140,4 +140,28 @@ class ContextFactoryTest {
 
 		testSingleAggregation(sql, expectedValues);
 	}
+
+	@Test
+	void testAvgWhere() throws Exception {
+		final String sql = String.format("select avg(a) from %s where c = 'a'", TABLE_NAME);
+		final int[] expectedValues = {2, 2};
+
+		testSingleAggregation(sql, expectedValues);
+	}
+
+	@Test
+	void testCountWhere() throws Exception {
+		final String sql = String.format("select count(a) from %s where c = 'a'", TABLE_NAME);
+		final int[] expectedValues = {2, 1};
+
+		testSingleAggregation(sql, expectedValues);
+	}
+
+	@Test
+	void testSumWhere() throws Exception {
+		final String sql = String.format("select sum(a) from %s where c = 'a'", TABLE_NAME);
+		final int[] expectedValues = {4, 2};
+
+		testSingleAggregation(sql, expectedValues);
+	}
 }
