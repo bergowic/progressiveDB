@@ -1,6 +1,6 @@
 package de.tuda.progressive.db.driver;
 
-import de.tuda.progressive.db.MemoryMetaData;
+import de.tuda.progressive.db.meta.MemoryMetaData;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;

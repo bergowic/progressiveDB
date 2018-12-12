@@ -1,4 +1,4 @@
-package de.tuda.progressive.db;
+package de.tuda.progressive.db.meta;
 
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
