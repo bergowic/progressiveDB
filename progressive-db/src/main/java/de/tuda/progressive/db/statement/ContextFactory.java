@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlAsOperator;
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlDataTypeSpec;
@@ -49,7 +50,7 @@ public class ContextFactory {
 			final SqlSelect sourceSelect = transformSelect(select, partition.getTableName(), aggregations);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
-			final SqlCreateTable createCache = createCache(driver, cacheTableName, metaData);
+			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
 			final SqlSelect selectCache = selectCache(cacheTableName, metaData, aggregations, sourceSelect.getGroup());
 
@@ -168,67 +169,6 @@ public class ContextFactory {
 		}
 
 		throw new IllegalArgumentException("column type is not supported: " + column.getClass());
-	}
-
-	private SqlCreateTable createCache(DbDriver driver, String cacheTableName, ResultSetMetaData metaData) {
-		final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
-
-		try {
-			for (int i = 1; i <= metaData.getColumnCount(); i++) {
-				final String name = metaData.getColumnName(i);
-				final int columnType = metaData.getColumnType(i);
-				final int precision = metaData.getPrecision(i);
-				final int scale = metaData.getScale(i);
-
-				columns.add(SqlDdlNodes.column(
-						SqlParserPos.ZERO,
-						new SqlIdentifier(name, SqlParserPos.ZERO),
-						typeToSqlType(driver, columnType, precision, scale),
-						null,
-						null
-				));
-			}
-		} catch (SQLException e) {
-			//TODO
-			e.printStackTrace();
-			throw new RuntimeException(e);
-		}
-
-		return SqlDdlNodes.createTable(
-				SqlParserPos.ZERO,
-				false,
-				false,
-				new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
-				columns,
-				null
-		);
-	}
-
-	private SqlDataTypeSpec typeToSqlType(DbDriver driver, int type, int precision, int scale) {
-		SqlTypeName sqlType;
-
-		switch (type) {
-			case Types.INTEGER:
-				sqlType = SqlTypeName.INTEGER;
-				break;
-			case Types.BIGINT:
-				sqlType = SqlTypeName.BIGINT;
-				break;
-			default:
-				sqlType = driver.toSqlType(type);
-				if (sqlType == null) {
-					throw new IllegalArgumentException("type not supported: " + type);
-				}
-		}
-
-		return new SqlDataTypeSpec(
-				new SqlIdentifier(sqlType.name(), SqlParserPos.ZERO),
-				precision,
-				scale > 0 ? scale : -1,
-				null,
-				null,
-				SqlParserPos.ZERO
-		);
 	}
 
 	private SqlInsert insertCache(String cacheTableName, ResultSetMetaData metaData) throws SQLException {
