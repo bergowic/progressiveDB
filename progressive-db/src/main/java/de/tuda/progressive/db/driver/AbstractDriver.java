@@ -58,12 +58,11 @@ public abstract class AbstractDriver implements DbDriver {
 
 		try (PreparedStatement statement = connection.prepareStatement(getSelectMinMax(table, columnNames))) {
 			try (ResultSet result = statement.executeQuery()) {
-				final ResultSetMetaData metaData = statement.getMetaData();
 				final List<Column> columns = new ArrayList<>();
 
 				result.next();
 
-				for (int i = 0; i < metaData.getColumnCount(); i += 2) {
+				for (int i = 0; i < columnNames.size(); i++) {
 					final Column column = new Column();
 					final int pos = i * 2 + 1;
 
