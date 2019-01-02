@@ -164,4 +164,13 @@ class ContextFactoryTest {
 
 		testSingleAggregation(sql, expectedValues);
 	}
+
+	@Test
+	void testColumnAlias() throws Exception {
+		final String sql = String.format("select sum(a) a from %s where c = 'a'", TABLE_NAME);
+		final SqlSelect select = (SqlSelect) SqlParser.create(sql).parseQuery();
+		final StatementContext context = ContextFactory.instance.create(connection, driver, select, PARTITION, CACHE_TABLE_NAME);
+
+		assertContextNotNull(context);
+	}
 }

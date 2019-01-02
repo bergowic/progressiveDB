@@ -5,10 +5,10 @@ import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlAsOperator;
 import org.apache.calcite.sql.SqlBasicCall;
-import org.apache.calcite.sql.SqlDataTypeSpec;
 import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlInsert;
+import org.apache.calcite.sql.SqlKind;
 import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
@@ -16,22 +16,20 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlValuesOperator;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.fun.SqlCountAggFunction;
 import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -46,13 +44,14 @@ public class ContextFactory {
 
 	public StatementContext create(Connection connection, DbDriver driver, SqlSelect select, Partition partition, String cacheTableName) {
 		try {
+			final List<SqlIdentifier> columnAliases = getColumnAliases(select.getSelectList());
 			final List<Aggregation> aggregations = getAggregations(select.getSelectList());
-			final SqlSelect sourceSelect = transformSelect(select, partition.getTableName(), aggregations);
+			final SqlSelect sourceSelect = transformSelect(driver, select, aggregations);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
-			final SqlSelect selectCache = selectCache(cacheTableName, metaData, aggregations, sourceSelect.getGroup());
+			final SqlSelect selectCache = selectCache(cacheTableName, metaData, columnAliases, aggregations, sourceSelect.getGroup());
 
 			return new StatementContext(sourceSelect, createCache, insertCache, selectCache, aggregations);
 		} catch (SQLException e) {
@@ -77,13 +76,20 @@ public class ContextFactory {
 		}
 	}
 
-	private SqlSelect transformSelect(SqlSelect select, String sourceTable, List<Aggregation> aggregations) {
+	private SqlSelect transformSelect(DbDriver driver, SqlSelect select, List<Aggregation> aggregations) {
 		final SqlNodeList oldSelectList = select.getSelectList();
 		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
 
 		for (int i = 0; i < oldSelectList.size(); i++) {
 			if (aggregations.get(i) == Aggregation.AVG) {
-				SqlBasicCall avg = (SqlBasicCall) oldSelectList.get(i);
+				SqlBasicCall call = (SqlBasicCall) oldSelectList.get(i);
+				SqlBasicCall avg;
+				if (call.getKind() == SqlKind.AS) {
+					avg = (SqlBasicCall) call.getOperands()[0];
+				} else {
+					avg = call;
+				}
+
 				selectList.add(createSumAggregation(avg.getOperands()));
 				selectList.add(createCountAggregation(avg.getOperands()));
 			} else {
@@ -99,11 +105,12 @@ public class ContextFactory {
 				SqlParserPos.ZERO
 		));
 
-		SqlIdentifier from = new SqlIdentifier(Collections.singletonList(sourceTable), select.getFrom().getParserPosition());
+		final SqlIdentifier oldFrom = (SqlIdentifier) select.getFrom();
+		SqlIdentifier from = new SqlIdentifier(Collections.singletonList(driver.getPartitionTable(oldFrom.getSimple())), SqlParserPos.ZERO);
 		SqlBasicCall where = createWhere((SqlBasicCall) select.getWhere());
 
 		return new SqlSelect(
-				select.getParserPosition(),
+				SqlParserPos.ZERO,
 				null,
 				selectList,
 				from,
@@ -144,18 +151,38 @@ public class ContextFactory {
 		);
 	}
 
-	private List<Aggregation> getAggregations(SqlNodeList columns) {
+	private <T> List<T> get(SqlNodeList columns, Function<SqlNode, T> func) {
 		return StreamSupport.stream(columns.spliterator(), false)
-				.map(ContextFactory::columnToAggregation)
+				.map(func)
 				.collect(Collectors.toList());
 	}
 
-	private static Aggregation columnToAggregation(SqlNode column) {
+	private List<SqlIdentifier> getColumnAliases(SqlNodeList columns) {
+		return get(columns, this::columnToAlias);
+	}
+
+	private SqlIdentifier columnToAlias(SqlNode column) {
+		if (!(column instanceof SqlBasicCall)) {
+			return null;
+		}
+		final SqlBasicCall call = (SqlBasicCall) column;
+		if (call.getKind() != SqlKind.AS) {
+			return null;
+		}
+		return (SqlIdentifier) call.operand(1);
+	}
+
+	private List<Aggregation> getAggregations(SqlNodeList columns) {
+		return get(columns, this::columnToAggregation);
+	}
+
+	private Aggregation columnToAggregation(SqlNode column) {
 		if (column instanceof SqlIdentifier || column instanceof SqlLiteral) {
 			return Aggregation.NONE;
 		}
 		if (column instanceof SqlBasicCall) {
-			SqlOperator operator = ((SqlBasicCall) column).getOperator();
+			SqlBasicCall call = (SqlBasicCall) column;
+			SqlOperator operator = call.getOperator();
 			switch (operator.getKind()) {
 				case AVG:
 					return Aggregation.AVG;
@@ -163,6 +190,8 @@ public class ContextFactory {
 					return Aggregation.COUNT;
 				case SUM:
 					return Aggregation.SUM;
+				case AS:
+					return columnToAggregation(call.getOperands()[0]);
 			}
 
 			throw new IllegalArgumentException("operation is not supported: " + operator.getKind());
@@ -198,36 +227,53 @@ public class ContextFactory {
 		);
 	}
 
-	private SqlSelect selectCache(String cacheTableName, ResultSetMetaData metaData, List<Aggregation> aggregations, SqlNodeList groups) {
+	private SqlSelect selectCache(
+			String cacheTableName,
+			ResultSetMetaData metaData,
+			List<SqlIdentifier> columnAliases,
+			List<Aggregation> aggregations,
+			SqlNodeList groups
+	) {
 		final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
 
 		int i = 0;
 		int index = 0;
 		try {
-			for (Aggregation aggregation : aggregations) {
+			for (int j = 0; j < columnAliases.size(); j++) {
+				final SqlIdentifier alias = columnAliases.get(j);
+				final Aggregation aggregation = aggregations.get(j);
+
 				final SqlIdentifier column = new SqlIdentifier(metaData.getColumnName(i + 1), SqlParserPos.ZERO);
+				SqlNode newColumn = null;
+
 				switch (aggregation) {
 					case NONE:
-						columns.add(column);
+						newColumn = column;
 						++i;
 						break;
 					case AVG:
 						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(i + 2), SqlParserPos.ZERO);
-						columns.add(creatAvgAggregation(column, nextColumn));
+						newColumn = creatAvgAggregation(column, nextColumn);
 						i += 2;
 						++index;
 						break;
 					case COUNT:
-						columns.add(createCountPercentAggregation(index, column));
+						newColumn = createCountPercentAggregation(index, column);
 						++i;
 						++index;
 						break;
 					case SUM:
-						columns.add(createSumPercentAggregation(index, column));
+						newColumn = createSumPercentAggregation(index, column);
 						++i;
 						++index;
 						break;
 				}
+
+				columns.add(alias == null ? newColumn : new SqlBasicCall(
+						SqlStdOperatorTable.AS,
+						new SqlNode[]{newColumn, alias},
+						SqlParserPos.ZERO
+				));
 			}
 		} catch (SQLException e) {
 			// TODO
@@ -235,7 +281,14 @@ public class ContextFactory {
 			throw new RuntimeException(e);
 		}
 
-		columns.add(new SqlDynamicParam(index, SqlParserPos.ZERO));
+		columns.add(new SqlBasicCall(
+				SqlStdOperatorTable.AS,
+				new SqlNode[]{
+						new SqlDynamicParam(index, SqlParserPos.ZERO),
+						new SqlIdentifier("partition", SqlParserPos.ZERO)
+				},
+				SqlParserPos.ZERO
+		));
 
 		return new SqlSelect(
 				SqlParserPos.ZERO,
