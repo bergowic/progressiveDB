@@ -54,7 +54,8 @@ public class PostgresqlDriver extends AbstractDriver {
 		return (int) Math.ceil(((double) count / (double) partitionSize));
 	}
 
-	private String getPartitionTable(String table) {
+	@Override
+	public String getPartitionTable(String table) {
 		return table + PART_COLUMN_NAME;
 	}
 

@@ -33,4 +33,10 @@ public class SqliteDriver extends AbstractDriver {
 	protected List<Partition> split(Connection connection, String table) {
 		throw new UnsupportedOperationException();
 	}
+
+	@Override
+	public String getPartitionTable(String table) {
+		//TODO
+		return table;
+	}
 }

@@ -13,4 +13,6 @@ public interface DbDriver {
 	SqlTypeName toSqlType(int jdbcType);
 
 	void prepareTable(Connection connection, String table, MetaData metaData);
+
+	String getPartitionTable(String table);
 }
