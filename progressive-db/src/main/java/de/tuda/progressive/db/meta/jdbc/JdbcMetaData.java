@@ -10,6 +10,7 @@ import org.sql2o.Sql2oException;
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Properties;
 
 public class JdbcMetaData implements MetaData {
 
@@ -55,6 +56,10 @@ public class JdbcMetaData implements MetaData {
 		sql2o = new Sql2o(url, user, password);
 
 		createTables();
+	}
+
+	public JdbcMetaData(String url, Properties properties) {
+		this(url, properties.getProperty("user", null), properties.getProperty("password", null));
 	}
 
 	public JdbcMetaData(DataSource dataSource) {
