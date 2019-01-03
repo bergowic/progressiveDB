@@ -107,4 +107,14 @@ public class SqlUtils {
 				new SqlIdentifier(table, SqlParserPos.ZERO)
 		);
 	}
+
+	public static void closeSafe(AutoCloseable closeable) {
+		if (closeable != null) {
+			try {
+				closeable.close();
+			} catch (Exception e) {
+				// do nothing
+			}
+		}
+	}
 }
