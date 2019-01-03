@@ -5,6 +5,7 @@ import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.dialect.PostgresqlSqlDialect;
 import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.sql.Connection;
@@ -18,6 +19,10 @@ import java.util.List;
 public class PostgresqlDriver extends AbstractDriver {
 
 	private static final int PARTITION_SIZE = 1000000;
+	private static SqlDialect SQL_DIALECT = new PostgresqlSqlDialect(
+			PostgresqlSqlDialect.EMPTY_CONTEXT
+					.withDatabaseProduct(SqlDialect.DatabaseProduct.POSTGRESQL)
+	);
 
 	private static final String PART_COLUMN_NAME = "_partition";
 	private static final String PART_DEF = String.format("partition by list(%s)", PART_COLUMN_NAME);
@@ -28,6 +33,10 @@ public class PostgresqlDriver extends AbstractDriver {
 	private static final SqlNode PARTITION_COLUMN = SqlUtils.createColumn(PART_COLUMN_NAME, SqlTypeName.INTEGER, 8, 0);
 
 	private int partitionSize = PARTITION_SIZE;
+
+	public PostgresqlDriver() {
+		this(SQL_DIALECT);
+	}
 
 	public PostgresqlDriver(SqlDialect dialect) {
 		super(dialect);
