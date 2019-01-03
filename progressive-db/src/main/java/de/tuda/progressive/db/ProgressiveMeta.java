@@ -18,31 +18,31 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
-public class PMeta extends JdbcMeta {
+public class ProgressiveMeta extends JdbcMeta {
 
 	private final ConcurrentMap<Integer, ProgressiveStatement> statements = new ConcurrentHashMap<>();
 
 	private final ProgressiveStatementFactory statementFactory;
 
-	public PMeta(String url, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, ProgressiveStatementFactory statementFactory) throws SQLException {
 		super(url);
 
 		this.statementFactory = statementFactory;
 	}
 
-	public PMeta(String url, String user, String password, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, String user, String password, ProgressiveStatementFactory statementFactory) throws SQLException {
 		super(url, user, password);
 
 		this.statementFactory = statementFactory;
 	}
 
-	public PMeta(String url, Properties info, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, Properties info, ProgressiveStatementFactory statementFactory) throws SQLException {
 		super(url, info);
 
 		this.statementFactory = statementFactory;
 	}
 
-	public PMeta(String url, Properties info, MetricsSystem metrics, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, Properties info, MetricsSystem metrics, ProgressiveStatementFactory statementFactory) throws SQLException {
 		super(url, info, metrics);
 
 		this.statementFactory = statementFactory;
