@@ -48,7 +48,7 @@ public abstract class AbstractDriver implements DbDriver {
 		final List<Partition> partitions = split(connection, table);
 		final List<Column> columns = getColumns(connection, table);
 
-		metaData.add(table, partitions, columns);
+		metaData.add(partitions, columns);
 	}
 
 	protected abstract List<Partition> split(Connection connection, String table);

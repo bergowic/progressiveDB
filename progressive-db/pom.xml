@@ -17,6 +17,7 @@
         <avatica.version>1.12.0</avatica.version>
         <slf4j.version>1.7.25</slf4j.version>
         <junit.version>5.1.0</junit.version>
+        <sql2o.version>1.6.0</sql2o.version>
         <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
         <postgresql.version>42.2.5</postgresql.version>
 
@@ -52,6 +53,12 @@
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.sql2o</groupId>
+            <artifactId>sql2o</artifactId>
+            <version>${sql2o.version}</version>
         </dependency>
 
         <dependency>

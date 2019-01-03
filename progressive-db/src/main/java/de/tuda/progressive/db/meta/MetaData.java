@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface MetaData {
 
-	void add(String table, List<Partition> partitions, List<Column> columns);
+	void add(List<Partition> partitions, List<Column> columns);
 
 	List<Partition> getPartitions(String table);
 
