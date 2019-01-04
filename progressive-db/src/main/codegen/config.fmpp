@@ -7,15 +7,20 @@ data: {
     # List of additional classes and packages to import.
     # Example. "org.apache.calcite.sql.*", "java.util.List".
     imports: [
+      "org.apache.calcite.sql.SqlCreate"
     ]
 
     # List of new keywords. Example: "DATABASES", "TABLES". If the keyword is not a reserved
     # keyword add it to 'nonReservedKeywords' section.
     keywords: [
+      "FUTURE"
+      "PROGRESSIVE"
     ]
 
     # List of keywords from "keywords" section that are not reserved.
     nonReservedKeywords: [
+      "FUTURE"
+      "PROGRESSIVE"
     ]
 
     # List of additional join types. Each is a method with no arguments.
@@ -51,6 +56,7 @@ data: {
     # List of methods for parsing extensions to "CREATE [OR REPLACE]" calls.
     # Each must accept arguments "(SqlParserPos pos, boolean replace)".
     createStatementParserMethods: [
+      "SqlCreateProgressiveView"
     ]
 
     # List of methods for parsing extensions to "DROP" calls.
