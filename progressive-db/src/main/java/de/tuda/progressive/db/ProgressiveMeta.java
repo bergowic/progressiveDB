@@ -14,11 +14,15 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
 
 public class ProgressiveMeta extends JdbcMeta {
+
+	private static final String KEYWORD_PROGRESSIVE = "PROGRESSIVE";
 
 	private final ConcurrentMap<Integer, ProgressiveStatement> statements = new ConcurrentHashMap<>();
 
@@ -52,19 +56,20 @@ public class ProgressiveMeta extends JdbcMeta {
 	public StatementHandle prepare(ConnectionHandle ch, String sql, long maxRowCount) {
 		System.out.println(sql);
 
-		if (sql.toUpperCase().startsWith("SELECT STREAM")) {
-			ProgressiveStatement statement = statementFactory.prepare(sql);
-
+		return prepareProgressiveStatement(sql, statement -> {
 			try {
-				StatementHandle handle = new StatementHandle(ch.id, getStatementIdGenerator().getAndIncrement(), signature(statement.getMetaData()));
+				StatementHandle handle = new StatementHandle(
+						ch.id,
+						getStatementIdGenerator().getAndIncrement(),
+						signature(statement.getMetaData())
+				);
+
 				statements.putIfAbsent(handle.id, statement);
 				return handle;
 			} catch (SQLException e) {
 				throw new RuntimeException(e);
 			}
-		} else {
-			return super.prepare(ch, sql, maxRowCount);
-		}
+		}).orElseGet(() -> super.prepare(ch, sql, maxRowCount));
 	}
 
 	@Override
@@ -131,14 +136,10 @@ public class ProgressiveMeta extends JdbcMeta {
 	private ExecuteResult hookPrepareAndExecute(StatementHandle h, String sql, long maxRowCount, int maxRowsInFirstFrame) throws NoSuchStatementException {
 		assertStatementExists(h);
 
-		if (sql.toUpperCase().startsWith("SELECT STREAM")) {
-			ProgressiveStatement statement = statementFactory.prepare(sql);
+		return prepareProgressiveStatement(sql, statement -> {
 			statements.putIfAbsent(h.id, statement);
-
 			return execute(h, statement);
-		}
-
-		return null;
+		}).orElse(null);
 	}
 
 	private ExecuteResult execute(StatementHandle h, ProgressiveStatement statement) {
@@ -171,5 +172,21 @@ public class ProgressiveMeta extends JdbcMeta {
 		}
 
 		return Frame.create(offset, done, rows);
+	}
+
+	private <T> Optional<T> prepareProgressiveStatement(String sql, Function<ProgressiveStatement, T> success) {
+		if (sql.toUpperCase().matches("^\\s*SELECT\\sPROGRESSIVE[\\s\\S]*")) {
+			ProgressiveStatement statement = statementFactory.prepare(removeProgressiveKeyword(sql));
+			return Optional.of(success.apply(statement));
+		}
+
+		return Optional.empty();
+	}
+
+	private String removeProgressiveKeyword(String sql) {
+		final int startProgressive = sql.toUpperCase().indexOf(KEYWORD_PROGRESSIVE);
+		final int endProgressive = startProgressive + KEYWORD_PROGRESSIVE.length();
+
+		return sql.substring(0, startProgressive) + sql.substring(endProgressive);
 	}
 }
