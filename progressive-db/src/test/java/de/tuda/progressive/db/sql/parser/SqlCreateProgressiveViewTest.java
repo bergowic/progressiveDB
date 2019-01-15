@@ -27,12 +27,13 @@ class SqlCreateProgressiveViewTest {
 				.setParserFactory(SqlParserImpl.FACTORY);
 	}
 
-	@Test
-	void valid() throws Exception {
+	void testSimple(boolean replace) throws Exception {
 		final String name = "a";
 		final String table = "b";
 
-		SqlParser parser = SqlParser.create(String.format("create progressive view %s as select * from %s", name, table), configBuilder.build());
+		SqlParser parser = SqlParser.create(String.format(
+				"create %s progressive view %s as select * from %s", replace ? "or replace" : "", name, table
+		), configBuilder.build());
 		SqlNode node = parser.parseStmt();
 
 		assertEquals(SqlCreateProgressiveView.class, node.getClass());
@@ -40,6 +41,7 @@ class SqlCreateProgressiveViewTest {
 		SqlCreateProgressiveView createProgressiveView = (SqlCreateProgressiveView) node;
 
 		assertEquals(name, createProgressiveView.getName().getSimple());
+		assertEquals(replace, createProgressiveView.getReplace());
 		assertEquals(SqlSelect.class, createProgressiveView.getQuery().getClass());
 
 		SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
@@ -49,6 +51,16 @@ class SqlCreateProgressiveViewTest {
 		SqlIdentifier from = (SqlIdentifier) select.getFrom();
 
 		assertEquals(table, from.getSimple());
+	}
+
+	@Test
+	void simpleCreate() throws Exception {
+		testSimple(false);
+	}
+
+	@Test
+	void simpleCreateOrReplace() throws Exception {
+		testSimple(true);
 	}
 
 	private void testFutureGroupBy(Pair<String, Boolean>... columns) throws Exception {
