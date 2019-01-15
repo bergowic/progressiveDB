@@ -10,6 +10,15 @@ SqlPrepareTable SqlPrepareTable() :
     }
 }
 
+boolean IfExistsOpt() :
+{
+}
+{
+    <IF> <EXISTS> { return true; }
+|
+    { return false; }
+}
+
 SqlNode FutureOrderedQueryOrExpr(ExprContext exprContext) :
 {
     SqlNode e;
@@ -268,3 +277,15 @@ SqlCreate SqlCreateProgressiveView(Span s, boolean replace) :
         return new SqlCreateProgressiveView(s.end(this), replace, id, columnList, query);
     }
 }
+
+SqlDrop SqlDropProgressiveView(Span s, boolean replace) :
+{
+    final boolean ifExists;
+    final SqlIdentifier id;
+}
+{
+    <PROGRESSIVE> <VIEW> ifExists = IfExistsOpt() id = CompoundIdentifier() {
+        return new SqlDropProgressiveView(s.end(this), ifExists, id);
+    }
+}
+

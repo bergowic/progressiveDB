@@ -8,12 +8,14 @@ data: {
     # Example. "org.apache.calcite.sql.*", "java.util.List".
     imports: [
       "org.apache.calcite.sql.SqlCreate"
+      "org.apache.calcite.sql.SqlDrop"
     ]
 
     # List of new keywords. Example: "DATABASES", "TABLES". If the keyword is not a reserved
     # keyword add it to 'nonReservedKeywords' section.
     keywords: [
       "FUTURE"
+      "IF"
       "PROGRESSIVE"
     ]
 
@@ -62,6 +64,7 @@ data: {
     # List of methods for parsing extensions to "DROP" calls.
     # Each must accept arguments "(SqlParserPos pos)".
     dropStatementParserMethods: [
+      "SqlDropProgressiveView"
     ]
 
     # List of files in @includes directory that have parser method
