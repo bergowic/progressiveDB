@@ -155,6 +155,7 @@ public class ProgressiveMeta extends JdbcMeta {
 	}
 
 	private ExecuteResult execute(StatementHandle h, ProgressiveStatement statement) {
+		statement.run();
 		ResultSet resultSet = statement.getResultSet();
 
 		try {

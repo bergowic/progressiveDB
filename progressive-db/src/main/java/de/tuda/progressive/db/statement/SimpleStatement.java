@@ -60,7 +60,10 @@ public class SimpleStatement implements ProgressiveStatement {
 			// TODO
 			throw new RuntimeException(e);
 		}
+	}
 
+	@Override
+	public void run() {
 		startFetching();
 	}
 

@@ -11,5 +11,7 @@ public interface ProgressiveStatement extends AutoCloseable {
 
 	boolean isDone();
 
+	void run();
+
 	void close();
 }
