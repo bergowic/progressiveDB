@@ -1,13 +1,20 @@
 package de.tuda.progressive.db;
 
+import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlDropProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlParserImpl;
+import de.tuda.progressive.db.sql.parser.SqlPrepareTable;
 import de.tuda.progressive.db.statement.ProgressiveStatement;
-import de.tuda.progressive.db.statement.ProgressiveStatementFactory;
 import org.apache.calcite.avatica.MissingResultsException;
 import org.apache.calcite.avatica.NoSuchStatementException;
 import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.calcite.avatica.jdbc.StatementInfo;
 import org.apache.calcite.avatica.metrics.MetricsSystem;
 import org.apache.calcite.avatica.remote.TypedValue;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.parser.SqlParseException;
+import org.apache.calcite.sql.parser.SqlParser;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,30 +33,35 @@ public class ProgressiveMeta extends JdbcMeta {
 
 	private final ConcurrentMap<Integer, ProgressiveStatement> statements = new ConcurrentHashMap<>();
 
-	private final ProgressiveStatementFactory statementFactory;
+	private final ProgressiveHandler progressiveHandler;
 
-	public ProgressiveMeta(String url, ProgressiveStatementFactory statementFactory) throws SQLException {
+	private final SqlParser.Config parserConfig = SqlParser.configBuilder()
+			.setCaseSensitive(true)
+			.setParserFactory(SqlParserImpl.FACTORY)
+			.build();
+
+	public ProgressiveMeta(String url, ProgressiveHandler progressiveHandler) throws SQLException {
 		super(url);
 
-		this.statementFactory = statementFactory;
+		this.progressiveHandler = progressiveHandler;
 	}
 
-	public ProgressiveMeta(String url, String user, String password, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, String user, String password, ProgressiveHandler progressiveHandler) throws SQLException {
 		super(url, user, password);
 
-		this.statementFactory = statementFactory;
+		this.progressiveHandler = progressiveHandler;
 	}
 
-	public ProgressiveMeta(String url, Properties info, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, Properties info, ProgressiveHandler progressiveHandler) throws SQLException {
 		super(url, info);
 
-		this.statementFactory = statementFactory;
+		this.progressiveHandler = progressiveHandler;
 	}
 
-	public ProgressiveMeta(String url, Properties info, MetricsSystem metrics, ProgressiveStatementFactory statementFactory) throws SQLException {
+	public ProgressiveMeta(String url, Properties info, MetricsSystem metrics, ProgressiveHandler progressiveHandler) throws SQLException {
 		super(url, info, metrics);
 
-		this.statementFactory = statementFactory;
+		this.progressiveHandler = progressiveHandler;
 	}
 
 	@Override
@@ -175,12 +187,38 @@ public class ProgressiveMeta extends JdbcMeta {
 	}
 
 	private <T> Optional<T> prepareProgressiveStatement(String sql, Function<ProgressiveStatement, T> success) {
+		boolean progressiveSelect = false;
+
 		if (sql.toUpperCase().matches("^\\s*SELECT\\sPROGRESSIVE[\\s\\S]*")) {
-			ProgressiveStatement statement = statementFactory.prepare(removeProgressiveKeyword(sql));
-			return Optional.of(success.apply(statement));
+			progressiveSelect = true;
+			sql = removeProgressiveKeyword(sql);
 		}
 
-		return Optional.empty();
+		SqlNode node = parse(sql);
+		ProgressiveStatement statement;
+
+		if (node instanceof SqlPrepareTable) {
+			statement = progressiveHandler.handle((SqlPrepareTable) node);
+		} else if (node instanceof SqlCreateProgressiveView) {
+			statement = progressiveHandler.handle((SqlCreateProgressiveView) node);
+		} else if (node instanceof SqlDropProgressiveView) {
+			statement = progressiveHandler.handle((SqlDropProgressiveView) node);
+		} else if (progressiveSelect) {
+			statement = progressiveHandler.handle((SqlSelect) node);
+		} else {
+			return Optional.empty();
+		}
+
+		return Optional.of(success.apply(statement));
+	}
+
+	private SqlNode parse(String sql) {
+		try {
+			return SqlParser.create(sql, parserConfig).parseStmt();
+		} catch (SqlParseException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
 	}
 
 	private String removeProgressiveKeyword(String sql) {

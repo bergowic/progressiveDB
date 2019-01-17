@@ -1,6 +1,8 @@
 package de.tuda.progressive.db.statement;
 
+import org.apache.calcite.sql.SqlSelect;
+
 public interface ProgressiveStatementFactory {
 
-	ProgressiveStatement prepare(String sql);
+	ProgressiveStatement prepare(SqlSelect select);
 }

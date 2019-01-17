@@ -1,5 +1,6 @@
 package de.tuda.progressive.db;
 
+import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.meta.jdbc.JdbcMetaData;
@@ -175,14 +176,14 @@ public class ProgressiveDbServer {
 			Connection tmpConnection = DriverManager.getConnection(tmpUrl, tmpProperties);
 			MetaData metaData = new JdbcMetaData(metaUrl, metaProperties);
 
-			ProgressiveStatementFactory statementFactory = new SimpleStatementFactory(
+			ProgressiveHandler progressiveHandler = new ProgressiveHandler(
 					DbDriverFactory.create(sourceUrl),
 					connection,
 					tmpConnection,
 					metaData
 			);
 
-			Meta meta = new ProgressiveMeta(sourceUrl, sourceProperties, statementFactory);
+			Meta meta = new ProgressiveMeta(sourceUrl, sourceProperties, progressiveHandler);
 			Service service = new PService(meta);
 
 			server = new HttpServer.Builder()

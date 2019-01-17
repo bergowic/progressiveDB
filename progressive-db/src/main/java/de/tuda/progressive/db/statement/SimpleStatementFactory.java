@@ -6,8 +6,6 @@ import de.tuda.progressive.db.model.Partition;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
-import org.apache.calcite.sql.parser.SqlParseException;
-import org.apache.calcite.sql.parser.SqlParser;
 
 import java.sql.Connection;
 import java.util.List;
@@ -30,8 +28,9 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 	}
 
 	@Override
-	public ProgressiveStatement prepare(String sql) {
-		final SqlSelect select = getSelect(sql);
+	public ProgressiveStatement prepare(SqlSelect select) {
+		assertValid(select);
+
 		final SqlIdentifier from = (SqlIdentifier) select.getFrom();
 		final List<Partition> partitions = metaData.getPartitions(from.getSimple());
 
@@ -40,16 +39,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 		return new SimpleStatement(driver, connection, tmpConnection, context, partitions);
 	}
 
-	private SqlSelect getSelect(String sql) {
-		SqlParser parser = SqlParser.create(sql);
-		SqlSelect select;
-
-		try {
-			select = (SqlSelect) parser.parseQuery();
-		} catch (SqlParseException e) {
-			throw new IllegalArgumentException(e);
-		}
-
+	private void assertValid(SqlSelect select) {
 		SqlNode fromNode = select.getFrom();
 		if (!(fromNode instanceof SqlIdentifier)) {
 			throw new IllegalArgumentException("from is not of type SqlIdentifier");
@@ -59,7 +49,5 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 		if (fromId.names.size() != 1) {
 			throw new IllegalArgumentException("from does not contain exact 1 source");
 		}
-
-		return select;
 	}
 }
