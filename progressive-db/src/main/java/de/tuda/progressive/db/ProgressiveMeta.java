@@ -10,6 +10,7 @@ import org.apache.calcite.avatica.NoSuchStatementException;
 import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.calcite.avatica.jdbc.StatementInfo;
 import org.apache.calcite.avatica.metrics.MetricsSystem;
+import org.apache.calcite.avatica.metrics.noop.NoopMetricsSystem;
 import org.apache.calcite.avatica.remote.TypedValue;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
@@ -41,27 +42,37 @@ public class ProgressiveMeta extends JdbcMeta {
 			.build();
 
 	public ProgressiveMeta(String url, ProgressiveHandler progressiveHandler) throws SQLException {
-		super(url);
-
-		this.progressiveHandler = progressiveHandler;
+		this(url, new Properties(), progressiveHandler);
 	}
 
 	public ProgressiveMeta(String url, String user, String password, ProgressiveHandler progressiveHandler) throws SQLException {
-		super(url, user, password);
-
-		this.progressiveHandler = progressiveHandler;
+		this(url, new Properties() {
+			{
+				put("user", user);
+				put("password", password);
+			}
+		}, progressiveHandler);
 	}
 
 	public ProgressiveMeta(String url, Properties info, ProgressiveHandler progressiveHandler) throws SQLException {
-		super(url, info);
-
-		this.progressiveHandler = progressiveHandler;
+		this(url, info, NoopMetricsSystem.getInstance(), progressiveHandler);
 	}
 
 	public ProgressiveMeta(String url, Properties info, MetricsSystem metrics, ProgressiveHandler progressiveHandler) throws SQLException {
 		super(url, info, metrics);
 
 		this.progressiveHandler = progressiveHandler;
+
+		init();
+	}
+
+	private void init() {
+		// warm up parser
+		try {
+			SqlParser.create("select * from dual", parserConfig).parseStmt();
+		} catch (SqlParseException e) {
+			// do nothing
+		}
 	}
 
 	@Override
