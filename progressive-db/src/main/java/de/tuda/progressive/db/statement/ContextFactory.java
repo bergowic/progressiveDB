@@ -26,6 +26,7 @@ import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -404,16 +405,13 @@ public class ContextFactory {
 			throw new RuntimeException(e);
 		}
 
-		selectList.add(new SqlBasicCall(
-				SqlStdOperatorTable.AS,
-				new SqlNode[]{
-						new SqlDynamicParam(index, SqlParserPos.ZERO),
-						new SqlIdentifier("partition", SqlParserPos.ZERO)
-				},
-				SqlParserPos.ZERO
-		));
-
+		addMetaField(selectList, index, "partition", SqlTypeName.INTEGER);
 		metaFieldPositions.put(MetaField.PARTITION, index);
+
+		++index;
+
+		addMetaField(selectList, index, "progress", SqlTypeName.FLOAT);
+		metaFieldPositions.put(MetaField.PROGRESS, index);
 
 		return new ImmutablePair<>(
 				new SqlSelect(
@@ -433,10 +431,35 @@ public class ContextFactory {
 		);
 	}
 
+	private void addMetaField(SqlNodeList selectList, int index, String name, SqlTypeName typeName) {
+		selectList.add(new SqlBasicCall(
+				SqlStdOperatorTable.AS,
+				new SqlNode[]{
+						createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName),
+						new SqlIdentifier(name, SqlParserPos.ZERO)
+				},
+				SqlParserPos.ZERO
+		));
+	}
+
+	private static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {
+		return new SqlBasicCall(
+				SqlStdOperatorTable.CAST,
+				new SqlNode[]{
+						node,
+						SqlUtils.getDataType(typeName)
+				},
+				SqlParserPos.ZERO
+		);
+	}
+
 	private static SqlBasicCall creatAvgAggregation(SqlNode operand1, SqlNode operand2) {
 		return new SqlBasicCall(
 				SqlStdOperatorTable.DIVIDE,
-				new SqlNode[]{createSumAggregation(operand1), createSumAggregation(operand2)},
+				new SqlNode[]{
+						createCast(createSumAggregation(operand1), SqlTypeName.FLOAT),
+						createCast(createSumAggregation(operand2), SqlTypeName.FLOAT)
+				},
 				SqlParserPos.ZERO);
 	}
 

@@ -11,6 +11,8 @@ public interface ProgressiveStatement extends AutoCloseable {
 
 	int getReadPartitions();
 
+	double getProgress();
+
 	boolean isDone();
 
 	void run();

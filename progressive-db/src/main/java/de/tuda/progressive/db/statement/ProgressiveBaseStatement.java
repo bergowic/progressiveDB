@@ -158,6 +158,11 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 		return readPartitions;
 	}
 
+	@Override
+	public synchronized double getProgress() {
+		return (double) readPartitions / (double) partitions.size();
+	}
+
 	protected PreparedStatement getTmpSelectStatement() {
 		return tmpSelectStatement;
 	}

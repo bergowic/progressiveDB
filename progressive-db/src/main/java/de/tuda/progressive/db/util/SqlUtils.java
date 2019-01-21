@@ -1,6 +1,9 @@
 package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
+import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.rel.type.RelDataTypeFactory;
+import org.apache.calcite.rel.type.RelDataTypeSystem;
 import org.apache.calcite.sql.SqlDataTypeSpec;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -9,7 +12,9 @@ import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.ddl.SqlDropTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.sql.type.SqlTypeUtil;
 
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -17,6 +22,8 @@ import java.sql.Types;
 import java.util.function.Consumer;
 
 public class SqlUtils {
+
+	private static final RelDataTypeFactory typeFactory = new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
 	private SqlUtils() {
 	}
@@ -128,5 +135,10 @@ public class SqlUtils {
 				throw new RuntimeException(e);
 			}
 		};
+	}
+
+	public static SqlDataTypeSpec getDataType(SqlTypeName typeName) {
+		RelDataType dataType = typeFactory.createSqlType(typeName);
+		return SqlTypeUtil.convertTypeToSpec(dataType);
 	}
 }

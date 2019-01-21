@@ -77,6 +77,11 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	}
 
 	@Override
+	public double getProgress() {
+		return viewStatement.getProgress();
+	}
+
+	@Override
 	public boolean isDone() {
 		return false;
 	}

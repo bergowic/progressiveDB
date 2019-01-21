@@ -74,6 +74,10 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 		context.getMetaFieldPosition(MetaField.PARTITION).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setInt(pos + 1, readPartitions - 1);
 		}));
+
+		context.getMetaFieldPosition(MetaField.PROGRESS).ifPresent(SqlUtils.consumer(pos -> {
+			statement.setDouble(pos + 1, getProgress());
+		}));
 	}
 
 	@Override
