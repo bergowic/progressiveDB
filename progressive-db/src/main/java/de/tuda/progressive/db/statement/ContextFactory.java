@@ -2,6 +2,8 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlFutureIdentifier;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlAsOperator;
 import org.apache.calcite.sql.SqlBasicCall;
@@ -21,19 +23,25 @@ import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 import java.util.stream.StreamSupport;
 
 public class ContextFactory {
+
+	private static final Logger log = LoggerFactory.getLogger(ContextFactory.class);
 
 	public static final ContextFactory instance = new ContextFactory();
 
@@ -52,6 +60,31 @@ public class ContextFactory {
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
 			final SqlSelect selectCache = selectCache(cacheTableName, metaData, columnAliases, aggregations, sourceSelect.getGroup());
+
+			log.info("select source: {}", sourceSelect);
+
+			return new StatementContext(sourceSelect, createCache, insertCache, selectCache, aggregations);
+		} catch (SQLException e) {
+			// TODO
+			e.printStackTrace();
+			throw new RuntimeException(e);
+		}
+	}
+
+	public StatementContext create(Connection connection, DbDriver driver, SqlCreateProgressiveView createProgressiveView) {
+		final SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
+		final String viewName = createProgressiveView.getName().getSimple();
+
+		try {
+			final List<SqlIdentifier> columnAliases = getColumnAliases(select.getSelectList());
+			final List<Aggregation> aggregations = getAggregations(select.getSelectList());
+			final SqlSelect sourceSelect = transformSelect(driver, select, aggregations);
+			final int[] sourceSelectMapping = sortSelectList(driver, sourceSelect);
+			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
+			final ResultSetMetaData metaData = preparedStatement.getMetaData();
+			final SqlCreateTable createCache = SqlUtils.createTable(driver, viewName, metaData);
+			final SqlInsert insertCache = insertCache(viewName, metaData);
+			final SqlSelect selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, aggregations, removeFutures(select.getGroup()));
 
 			return new StatementContext(sourceSelect, createCache, insertCache, selectCache, aggregations);
 		} catch (SQLException e) {
@@ -78,7 +111,9 @@ public class ContextFactory {
 
 	private SqlSelect transformSelect(DbDriver driver, SqlSelect select, List<Aggregation> aggregations) {
 		final SqlNodeList oldSelectList = select.getSelectList();
-		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+		final SqlNodeList oldGroups = select.getGroup();
+		SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+		SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
 
 		for (int i = 0; i < oldSelectList.size(); i++) {
 			if (aggregations.get(i) == Aggregation.AVG) {
@@ -94,6 +129,16 @@ public class ContextFactory {
 				selectList.add(createCountAggregation(avg.getOperands()));
 			} else {
 				selectList.add(oldSelectList.get(i));
+			}
+		}
+
+		for (SqlNode group : oldGroups) {
+			if (group instanceof SqlFutureIdentifier) {
+				final SqlIdentifier name = new SqlIdentifier(((SqlFutureIdentifier) group).names, SqlParserPos.ZERO);
+				selectList.add(name);
+				groups.add(name);
+			} else {
+				groups.add(group);
 			}
 		}
 
@@ -115,13 +160,45 @@ public class ContextFactory {
 				selectList,
 				from,
 				where,
-				select.getGroup(),
+				groups,
 				select.getHaving(),
 				select.getWindowList(),
 				select.getOrderList(),
 				select.getOffset(),
 				select.getFetch()
 		);
+	}
+
+	private int[] sortSelectList(DbDriver driver, SqlSelect select) {
+		final SqlNodeList selectList = select.getSelectList();
+		final List<String> selectStrings = get(selectList, driver::toSql);
+
+		int[] permutation = IntStream.range(0, selectList.size()).toArray();
+		for (int i = 0; i < selectList.size() - 1; i++) {
+			int index = i;
+			for (int j = i + 1; j < selectList.size() - 1; j++) {
+				if (selectStrings.get(permutation[j]).compareTo(selectStrings.get(permutation[index])) < 0) {
+					index = j;
+				}
+			}
+			{
+				SqlNode tmp = selectList.get(i);
+				selectList.set(i, selectList.get(index));
+				selectList.set(index, tmp);
+			}
+			{
+				int tmp = permutation[i];
+				permutation[i] = permutation[index];
+				permutation[index] = tmp;
+			}
+		}
+
+		int[] mapping = new int[permutation.length];
+		for (int i = 0; i < mapping.length; i++) {
+			mapping[permutation[i]] = i;
+		}
+
+		return mapping;
 	}
 
 	private SqlBasicCall createWhere(SqlBasicCall oldWhere) {
@@ -155,6 +232,14 @@ public class ContextFactory {
 		return StreamSupport.stream(columns.spliterator(), false)
 				.map(func)
 				.collect(Collectors.toList());
+	}
+
+	private SqlNodeList removeFutures(SqlNodeList groups) {
+		return new SqlNodeList(StreamSupport.stream(groups.spliterator(), false)
+				.filter(n -> !(n instanceof SqlFutureIdentifier))
+				.collect(Collectors.toList())
+				, SqlParserPos.ZERO
+		);
 	}
 
 	private List<SqlIdentifier> getColumnAliases(SqlNodeList columns) {
@@ -234,7 +319,24 @@ public class ContextFactory {
 			List<Aggregation> aggregations,
 			SqlNodeList groups
 	) {
-		final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
+		try {
+			int[] selectMapping = IntStream.range(0, metaData.getColumnCount()).toArray();
+			return selectCache(cacheTableName, metaData, selectMapping, columnAliases, aggregations, groups);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	private SqlSelect selectCache(
+			String cacheTableName,
+			ResultSetMetaData metaData,
+			int[] selectMapping,
+			List<SqlIdentifier> columnAliases,
+			List<Aggregation> aggregations,
+			SqlNodeList groups
+	) {
+		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
 
 		int i = 0;
 		int index = 0;
@@ -243,7 +345,7 @@ public class ContextFactory {
 				final SqlIdentifier alias = columnAliases.get(j);
 				final Aggregation aggregation = aggregations.get(j);
 
-				final SqlIdentifier column = new SqlIdentifier(metaData.getColumnName(i + 1), SqlParserPos.ZERO);
+				final SqlIdentifier column = new SqlIdentifier(metaData.getColumnName(selectMapping[i] + 1), SqlParserPos.ZERO);
 				SqlNode newColumn = null;
 
 				switch (aggregation) {
@@ -252,7 +354,7 @@ public class ContextFactory {
 						++i;
 						break;
 					case AVG:
-						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(i + 2), SqlParserPos.ZERO);
+						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(selectMapping[i + 1] + 1), SqlParserPos.ZERO);
 						newColumn = creatAvgAggregation(column, nextColumn);
 						i += 2;
 						++index;
@@ -269,7 +371,7 @@ public class ContextFactory {
 						break;
 				}
 
-				columns.add(alias == null ? newColumn : new SqlBasicCall(
+				selectList.add(alias == null ? newColumn : new SqlBasicCall(
 						SqlStdOperatorTable.AS,
 						new SqlNode[]{newColumn, alias},
 						SqlParserPos.ZERO
@@ -281,7 +383,7 @@ public class ContextFactory {
 			throw new RuntimeException(e);
 		}
 
-		columns.add(new SqlBasicCall(
+		selectList.add(new SqlBasicCall(
 				SqlStdOperatorTable.AS,
 				new SqlNode[]{
 						new SqlDynamicParam(index, SqlParserPos.ZERO),
@@ -293,7 +395,7 @@ public class ContextFactory {
 		return new SqlSelect(
 				SqlParserPos.ZERO,
 				null,
-				columns,
+				selectList,
 				new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
 				null,
 				groups,
