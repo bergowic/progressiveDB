@@ -97,9 +97,11 @@ class ContextFactoryTest {
 								case SUM:
 									selectCacheStatement.setDouble(1, (double) (i + 1) / (double) expectedValues.length);
 									selectCacheStatement.setInt(2, i);
+									selectCacheStatement.setDouble(3, i / expectedValues.length);
 									break;
 								default:
 									selectCacheStatement.setInt(1, i);
+									selectCacheStatement.setDouble(2, i / expectedValues.length);
 							}
 
 							try (ResultSet result = selectCacheStatement.executeQuery()) {

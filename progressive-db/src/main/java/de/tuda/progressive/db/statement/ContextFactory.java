@@ -133,7 +133,7 @@ public class ContextFactory {
 
 	private SqlSelect transformSelect(DbDriver driver, SqlSelect select, List<Aggregation> aggregations) {
 		final SqlNodeList oldSelectList = select.getSelectList();
-		final SqlNodeList oldGroups = select.getGroup();
+		final SqlNodeList oldGroups = select.getGroup() == null ? SqlNodeList.EMPTY : select.getGroup();
 		SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
 		SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
 
@@ -182,7 +182,7 @@ public class ContextFactory {
 				selectList,
 				from,
 				where,
-				groups,
+				groups.size() > 0 ? groups : null,
 				select.getHaving(),
 				select.getWindowList(),
 				select.getOrderList(),
