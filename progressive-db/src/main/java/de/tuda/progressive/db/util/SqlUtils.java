@@ -14,6 +14,7 @@ import org.apache.calcite.sql.type.SqlTypeName;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.function.Consumer;
 
 public class SqlUtils {
 
@@ -116,5 +117,16 @@ public class SqlUtils {
 				// do nothing
 			}
 		}
+	}
+
+	public static <T> Consumer<T> consumer(SqlConsumer<T> consumer) {
+		return value -> {
+			try {
+				consumer.accept(value);
+			} catch (SQLException e) {
+				// TODO
+				throw new RuntimeException(e);
+			}
+		};
 	}
 }

@@ -72,7 +72,7 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	}
 
 	@Override
-	public long getReadPartitions() {
+	public int getReadPartitions() {
 		return viewStatement.getReadPartitions();
 	}
 

@@ -36,7 +36,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
 	private PreparedStatement tmpSelectStatement;
 
-	private long readPartitions;
+	private int readPartitions;
 
 	protected final ResultSetMetaData metaData;
 
@@ -154,7 +154,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 	}
 
 	@Override
-	public synchronized long getReadPartitions() {
+	public synchronized int getReadPartitions() {
 		return readPartitions;
 	}
 

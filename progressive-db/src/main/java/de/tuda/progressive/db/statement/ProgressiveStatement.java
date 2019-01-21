@@ -9,7 +9,7 @@ public interface ProgressiveStatement extends AutoCloseable {
 
 	ResultSetMetaData getMetaData();
 
-	long getReadPartitions();
+	int getReadPartitions();
 
 	boolean isDone();
 

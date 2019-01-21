@@ -26,6 +26,8 @@ import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,9 +35,10 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -62,11 +65,18 @@ public class ContextFactory {
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
-			final SqlSelect selectCache = selectCache(cacheTableName, metaData, columnAliases, aggregations, sourceSelect.getGroup());
+			final Pair<SqlSelect, Map<MetaField, Integer>> selectCache = selectCache(cacheTableName, metaData, columnAliases, aggregations, sourceSelect.getGroup());
 
 			log.info("select source: {}", sourceSelect);
 
-			return new StatementContext(sourceSelect, createCache, insertCache, selectCache, aggregations);
+			return new StatementContext(
+					sourceSelect,
+					createCache,
+					insertCache,
+					selectCache.getLeft(),
+					aggregations,
+					selectCache.getRight()
+			);
 		} catch (SQLException e) {
 			// TODO
 			e.printStackTrace();
@@ -87,9 +97,17 @@ public class ContextFactory {
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, viewName, metaData);
 			final SqlInsert insertCache = insertCache(viewName, metaData);
-			final SqlSelect selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, aggregations, removeFutures(select.getGroup()));
+			final Pair<SqlSelect, Map<MetaField, Integer>> selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, aggregations, removeFutures(select.getGroup()));
 
-			return new StatementContext(sourceSelect, createCache, insertCache, selectCache, aggregations);
+
+			return new StatementContext(
+					sourceSelect,
+					createCache,
+					insertCache,
+					selectCache.getLeft(),
+					aggregations,
+					selectCache.getRight()
+			);
 		} catch (SQLException e) {
 			// TODO
 			e.printStackTrace();
@@ -315,7 +333,7 @@ public class ContextFactory {
 		);
 	}
 
-	private SqlSelect selectCache(
+	private Pair<SqlSelect, Map<MetaField, Integer>> selectCache(
 			String cacheTableName,
 			ResultSetMetaData metaData,
 			List<SqlIdentifier> columnAliases,
@@ -331,7 +349,7 @@ public class ContextFactory {
 		}
 	}
 
-	private SqlSelect selectCache(
+	private Pair<SqlSelect, Map<MetaField, Integer>> selectCache(
 			String cacheTableName,
 			ResultSetMetaData metaData,
 			int[] selectMapping,
@@ -340,6 +358,7 @@ public class ContextFactory {
 			SqlNodeList groups
 	) {
 		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+		final Map<MetaField, Integer> metaFieldPositions = new HashMap<>();
 
 		int i = 0;
 		int index = 0;
@@ -360,7 +379,6 @@ public class ContextFactory {
 						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(selectMapping[i + 1] + 1), SqlParserPos.ZERO);
 						newColumn = creatAvgAggregation(column, nextColumn);
 						i += 2;
-						++index;
 						break;
 					case COUNT:
 						newColumn = createCountPercentAggregation(index, column);
@@ -395,18 +413,23 @@ public class ContextFactory {
 				SqlParserPos.ZERO
 		));
 
-		return new SqlSelect(
-				SqlParserPos.ZERO,
-				null,
-				selectList,
-				new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
-				null,
-				groups,
-				null,
-				null,
-				null,
-				null,
-				null
+		metaFieldPositions.put(MetaField.PARTITION, index);
+
+		return new ImmutablePair<>(
+				new SqlSelect(
+						SqlParserPos.ZERO,
+						null,
+						selectList,
+						new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
+						null,
+						groups,
+						null,
+						null,
+						null,
+						null,
+						null
+				),
+				metaFieldPositions
 		);
 	}
 
@@ -450,5 +473,4 @@ public class ContextFactory {
 				},
 				SqlParserPos.ZERO);
 	}
-
 }

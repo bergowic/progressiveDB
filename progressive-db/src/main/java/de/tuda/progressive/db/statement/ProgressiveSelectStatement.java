@@ -5,6 +5,7 @@ import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.StatementContext;
+import de.tuda.progressive.db.util.SqlUtils;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -49,7 +50,8 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 						break;
 				}
 			}
-			tmpSelectStatement.setInt(pos, partition.getId());
+
+			setMetaFields(tmpSelectStatement);
 
 			ResultSet resultSet = tmpSelectStatement.executeQuery();
 			while (resultSet.next()) {
@@ -64,6 +66,14 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 			// TODO
 			throw new RuntimeException(e);
 		}
+	}
+
+	private void setMetaFields(PreparedStatement statement) {
+		final int readPartitions = getReadPartitions();
+
+		context.getMetaFieldPosition(MetaField.PARTITION).ifPresent(SqlUtils.consumer(pos -> {
+			statement.setInt(pos + 1, readPartitions - 1);
+		}));
 	}
 
 	@Override
