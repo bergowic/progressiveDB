@@ -2,6 +2,9 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.Aggregation;
+import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.StatementContext;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;

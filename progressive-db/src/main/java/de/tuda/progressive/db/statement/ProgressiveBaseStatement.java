@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlSelect;
 import org.slf4j.Logger;

@@ -4,6 +4,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.statement.context.StatementContext;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;

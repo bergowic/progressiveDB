@@ -1,4 +1,4 @@
-package de.tuda.progressive.db.statement;
+package de.tuda.progressive.db.statement.context;
 
 import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlSelect;
