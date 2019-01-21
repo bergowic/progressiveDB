@@ -44,8 +44,7 @@ public class ProgressiveHandler {
 	}
 
 	public ProgressiveStatement handle(SqlCreateProgressiveView createProgressiveView) {
-		// TODO
-		return null;
+		return statementFactory.prepare(createProgressiveView);
 	}
 
 	public ProgressiveStatement handle(SqlDropProgressiveView dropProgressiveView) {
