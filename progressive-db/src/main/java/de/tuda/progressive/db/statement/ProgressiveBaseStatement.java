@@ -152,6 +152,11 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 		SqlUtils.closeSafe(tmpSelectStatement);
 	}
 
+	@Override
+	public synchronized long getReadPartitions() {
+		return readPartitions;
+	}
+
 	protected PreparedStatement getTmpSelectStatement() {
 		return tmpSelectStatement;
 	}
