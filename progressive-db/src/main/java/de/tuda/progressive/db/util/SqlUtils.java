@@ -1,6 +1,9 @@
 package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.statement.context.Aggregation;
+import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -16,9 +19,11 @@ import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
 
+import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class SqlUtils {
@@ -140,5 +145,32 @@ public class SqlUtils {
 	public static SqlDataTypeSpec getDataType(SqlTypeName typeName) {
 		RelDataType dataType = typeFactory.createSqlType(typeName);
 		return SqlTypeUtil.convertTypeToSpec(dataType);
+	}
+
+	public static void setScale(PreparedStatement statement, SimpleStatementContext context, double progress) {
+		try {
+			int pos = 1;
+			for (Aggregation aggregation : context.getAggregations()) {
+				switch (aggregation) {
+					case COUNT:
+					case SUM:
+						statement.setDouble(pos++, progress);
+						break;
+				}
+			}
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	public static void setMetaFields(PreparedStatement statement, SimpleStatementContext context, Map<MetaField, Object> values) {
+		context.getMetaFieldPosition(MetaField.PARTITION).ifPresent(SqlUtils.consumer(pos -> {
+			statement.setInt(pos + 1, (int) values.get(MetaField.PARTITION));
+		}));
+
+		context.getMetaFieldPosition(MetaField.PROGRESS).ifPresent(SqlUtils.consumer(pos -> {
+			statement.setDouble(pos + 1, (double) values.get(MetaField.PROGRESS));
+		}));
 	}
 }

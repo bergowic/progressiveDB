@@ -2,8 +2,8 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
-import org.apache.calcite.sql.SqlSelect;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -68,7 +68,7 @@ public class ProgressiveViewStatement extends ProgressiveBaseStatement {
 		listeners.remove(listener);
 	}
 
-	public void setSelect(SqlSelect select) {
-		setTmpSelectStatement(select);
+	public void setSimpleContext(SimpleStatementContext simpleContext) {
+		super.setSimpleContext(simpleContext);
 	}
 }

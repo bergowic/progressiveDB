@@ -4,6 +4,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
 
@@ -12,8 +13,10 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 
 public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 
@@ -41,17 +44,13 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 		final PreparedStatement tmpSelectStatement = getTmpSelectStatement();
 
 		try {
-			int pos = 1;
-			for (Aggregation aggregation : context.getAggregations()) {
-				switch (aggregation) {
-					case COUNT:
-					case SUM:
-						tmpSelectStatement.setDouble(pos++, (double) getReadPartitions() / (double) partitions.size());
-						break;
-				}
-			}
+			final double scale = (double) getReadPartitions() / (double) partitions.size();
 
-			setMetaFields(tmpSelectStatement);
+			SqlUtils.setScale(tmpSelectStatement, context, scale);
+			SqlUtils.setMetaFields(tmpSelectStatement, context, new HashMap<MetaField, Object>() {{
+				put(MetaField.PARTITION, getReadPartitions() - 1);
+				put(MetaField.PROGRESS, getProgress());
+			}});
 
 			ResultSet resultSet = tmpSelectStatement.executeQuery();
 			while (resultSet.next()) {
@@ -66,18 +65,6 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 			// TODO
 			throw new RuntimeException(e);
 		}
-	}
-
-	private void setMetaFields(PreparedStatement statement) {
-		final int readPartitions = getReadPartitions();
-
-		context.getMetaFieldPosition(MetaField.PARTITION).ifPresent(SqlUtils.consumer(pos -> {
-			statement.setInt(pos + 1, readPartitions - 1);
-		}));
-
-		context.getMetaFieldPosition(MetaField.PROGRESS).ifPresent(SqlUtils.consumer(pos -> {
-			statement.setDouble(pos + 1, getProgress());
-		}));
 	}
 
 	@Override

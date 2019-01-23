@@ -1,5 +1,7 @@
 package de.tuda.progressive.db.statement;
 
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
+
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 
@@ -18,4 +20,6 @@ public interface ProgressiveStatement extends AutoCloseable {
 	void run();
 
 	void close();
+
+	SimpleStatementContext getContext();
 }

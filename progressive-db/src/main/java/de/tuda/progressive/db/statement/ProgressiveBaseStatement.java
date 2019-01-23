@@ -2,9 +2,9 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.SqlSelect;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,6 +36,8 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
 	private PreparedStatement tmpSelectStatement;
 
+	private SimpleStatementContext simpleContext;
+
 	private int readPartitions;
 
 	protected final ResultSetMetaData metaData;
@@ -60,7 +62,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
 			preparedStatement = connection.prepareStatement(driver.toSql(context.getSelectSource()));
 			tmpInsertStatement = tmpConnection.prepareStatement(driver.toSql(context.getInsertCache()));
-			setTmpSelectStatement(context.getSelectCache());
+			setSimpleContext(context);
 
 			metaData = new ResultSetMetaDataWrapper(tmpSelectStatement.getMetaData());
 		} catch (SQLException e) {
@@ -167,12 +169,19 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 		return tmpSelectStatement;
 	}
 
-	protected void setTmpSelectStatement(SqlSelect select) {
+	protected void setSimpleContext(SimpleStatementContext context) {
+		this.simpleContext = context;
+
 		try {
-			tmpSelectStatement = tmpConnection.prepareStatement(driver.toSql(select));
+			tmpSelectStatement = tmpConnection.prepareStatement(driver.toSql(context.getSelectCache()));
 		} catch (SQLException e) {
 			// TODO
 			throw new RuntimeException(e);
 		}
+	}
+
+	@Override
+	public SimpleStatementContext getContext() {
+		return simpleContext;
 	}
 }

@@ -1,6 +1,10 @@
 package de.tuda.progressive.db.statement;
 
+import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
+import de.tuda.progressive.db.util.SqlUtils;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -8,6 +12,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -15,17 +20,25 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 
 	private final ProgressiveViewStatement viewStatement;
 
+	private final SimpleStatementContext context;
+
 	private final PreparedStatement selectStatement;
 
 	private final ResultSetMetaData metaData;
 
 	private List<Object[]> results = new ArrayList<>();
 
-	public ProgressiveViewSelectStatement(Connection tmpConnection, ProgressiveViewStatement viewStatement, String sql) {
+	public ProgressiveViewSelectStatement(
+			Connection tmpConnection,
+			DbDriver driver,
+			ProgressiveViewStatement viewStatement,
+			SimpleStatementContext context
+	) {
 		this.viewStatement = viewStatement;
+		this.context = context;
 
 		try {
-			this.selectStatement = tmpConnection.prepareStatement(sql);
+			this.selectStatement = tmpConnection.prepareStatement(driver.toSql(context.getSelectCache()));
 			this.metaData = new ResultSetMetaDataWrapper(selectStatement.getMetaData());
 		} catch (SQLException e) {
 			// TODO
@@ -36,6 +49,12 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	@Override
 	public synchronized void handle(Partition partition) {
 		try {
+			SqlUtils.setScale(selectStatement, context, getProgress());
+			SqlUtils.setMetaFields(selectStatement, context, new HashMap<MetaField, Object>() {{
+				put(MetaField.PARTITION, getReadPartitions() - 1);
+				put(MetaField.PROGRESS, getProgress());
+			}});
+
 			ResultSet resultSet = selectStatement.executeQuery();
 			while (resultSet.next()) {
 				Object[] row = new Object[getMetaData().getColumnCount()];
@@ -94,5 +113,10 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	@Override
 	public void close() {
 		viewStatement.removeListener(this);
+	}
+
+	@Override
+	public SimpleStatementContext getContext() {
+		return context;
 	}
 }

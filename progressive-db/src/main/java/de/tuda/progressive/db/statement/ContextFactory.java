@@ -6,6 +6,7 @@ import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureIdentifier;
 import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlAsOperator;
@@ -85,6 +86,24 @@ public class ContextFactory {
 		}
 	}
 
+	public SimpleStatementContext create(SimpleStatementContext context, SqlSelect select) {
+		final SqlSelect viewSelect = new SqlSelect(
+				SqlParserPos.ZERO,
+				null,
+				select.getSelectList(),
+				context.getSelectCache(),
+				select.getWhere(),
+				select.getGroup(),
+				select.getHaving(),
+				select.getWindowList(),
+				select.getOrderList(),
+				select.getOffset(),
+				select.getFetch()
+		);
+
+		return new SimpleStatementContext(viewSelect, context.getAggregations(), context.getMetaFieldPositions());
+	}
+
 	public StatementContext create(Connection connection, DbDriver driver, SqlCreateProgressiveView createProgressiveView) {
 		final SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
 		final String viewName = createProgressiveView.getName().getSimple();
@@ -99,7 +118,6 @@ public class ContextFactory {
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, viewName, metaData);
 			final SqlInsert insertCache = insertCache(viewName, metaData);
 			final Pair<SqlSelect, Map<MetaField, Integer>> selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, aggregations, removeFutures(select.getGroup()));
-
 
 			return new StatementContext(
 					sourceSelect,

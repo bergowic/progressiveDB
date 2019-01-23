@@ -6,21 +6,14 @@ import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
-public class StatementContext {
+public class StatementContext extends SimpleStatementContext {
 
 	private final SqlSelect selectSource;
 
 	private final SqlCreateTable createCache;
 
 	private final SqlInsert insertCache;
-
-	private final SqlSelect selectCache;
-
-	private final List<Aggregation> aggregations;
-
-	private final Map<MetaField, Integer> metaFieldPositions;
 
 	public StatementContext(
 			SqlSelect selectSource,
@@ -30,12 +23,11 @@ public class StatementContext {
 			List<Aggregation> aggregations,
 			Map<MetaField, Integer> metaFieldPositions
 	) {
+		super(selectCache, aggregations, metaFieldPositions);
+
 		this.selectSource = selectSource;
 		this.createCache = createCache;
 		this.insertCache = insertCache;
-		this.selectCache = selectCache;
-		this.aggregations = aggregations;
-		this.metaFieldPositions = metaFieldPositions;
 	}
 
 	public SqlSelect getSelectSource() {
@@ -48,17 +40,5 @@ public class StatementContext {
 
 	public SqlInsert getInsertCache() {
 		return insertCache;
-	}
-
-	public SqlSelect getSelectCache() {
-		return selectCache;
-	}
-
-	public List<Aggregation> getAggregations() {
-		return aggregations;
-	}
-
-	public Optional<Integer> getMetaFieldPosition(MetaField metaField) {
-		return Optional.of(metaFieldPositions.get(metaField));
 	}
 }

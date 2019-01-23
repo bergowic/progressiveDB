@@ -4,6 +4,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
@@ -54,7 +55,8 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 			return new ProgressiveSelectStatement(driver, connection, tmpConnection, context, partitions);
 		} else {
 			log.info("view found");
-			return new ProgressiveViewSelectStatement(tmpConnection, viewStatement, driver.toSql(select));
+			final SimpleStatementContext context = ContextFactory.instance.create(viewStatement.getContext(), select);
+			return new ProgressiveViewSelectStatement(tmpConnection, driver, viewStatement, context);
 		}
 	}
 
@@ -85,7 +87,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 				log.info("same data source, update select");
 				final ProgressiveViewStatement statement = viewStatements.get(viewName);
 
-				statement.setSelect(context.getSelectCache());
+				statement.setSimpleContext(context);
 
 				return statement;
 			} else {
