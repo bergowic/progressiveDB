@@ -99,6 +99,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 		log.info("query next partition: {}", partition.getId());
 		try {
 			preparedStatement.setInt(1, partition.getId());
+			log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
 
 			ResultSet resultSet = preparedStatement.executeQuery();
 

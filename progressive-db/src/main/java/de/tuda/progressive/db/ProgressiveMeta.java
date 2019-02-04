@@ -16,6 +16,8 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -29,6 +31,8 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 
 public class ProgressiveMeta extends JdbcMeta {
+
+	private static final Logger log = LoggerFactory.getLogger(ProgressiveMeta.class);
 
 	private static final String KEYWORD_PROGRESSIVE = "PROGRESSIVE";
 
@@ -132,6 +136,8 @@ public class ProgressiveMeta extends JdbcMeta {
 			return super.fetch(h, offset, fetchMaxRowCount);
 		}
 
+		log.info("fetch");
+
 		try {
 			return createFrame(offset, statement.isDone(), statement.getResultSet());
 		} catch (SQLException e) {
@@ -167,6 +173,7 @@ public class ProgressiveMeta extends JdbcMeta {
 
 	private ExecuteResult execute(StatementHandle h, ProgressiveStatement statement) {
 		statement.run();
+
 		ResultSet resultSet = statement.getResultSet();
 
 		try {
@@ -194,6 +201,8 @@ public class ProgressiveMeta extends JdbcMeta {
 			rows.add(columns);
 			offset++;
 		}
+
+		log.info("send data back");
 
 		return Frame.create(offset, done, rows);
 	}

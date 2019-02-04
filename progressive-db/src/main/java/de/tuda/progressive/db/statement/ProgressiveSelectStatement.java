@@ -2,11 +2,11 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
-import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -16,9 +16,10 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 
 public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
+
+	private static final Logger log = LoggerFactory.getLogger(ProgressiveSelectStatement.class);
 
 	private final StatementContext context;
 
@@ -44,6 +45,7 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 		final PreparedStatement tmpSelectStatement = getTmpSelectStatement();
 
 		try {
+			log.info("prepare cache query");
 			final double scale = (double) getReadPartitions() / (double) partitions.size();
 
 			SqlUtils.setScale(tmpSelectStatement, context, scale);
@@ -51,6 +53,8 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 				put(MetaField.PARTITION, getReadPartitions() - 1);
 				put(MetaField.PROGRESS, getProgress());
 			}});
+
+			log.info("run cache query");
 
 			ResultSet resultSet = tmpSelectStatement.executeQuery();
 			while (resultSet.next()) {
@@ -60,6 +64,9 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 				}
 				results.add(row);
 			}
+
+			log.info("cache results received");
+
 			notify();
 		} catch (SQLException e) {
 			// TODO

@@ -7,6 +7,8 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.dialect.PostgresqlSqlDialect;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -19,6 +21,8 @@ import java.util.List;
 public class PostgresqlDriver extends AbstractDriver {
 
 	private static final int PARTITION_SIZE = 1000000;
+	private static final Logger log = LoggerFactory.getLogger(PostgresqlDriver.class);
+
 	private static SqlDialect SQL_DIALECT = new PostgresqlSqlDialect(
 			PostgresqlSqlDialect.EMPTY_CONTEXT
 					.withDatabaseProduct(SqlDialect.DatabaseProduct.POSTGRESQL)
@@ -45,16 +49,21 @@ public class PostgresqlDriver extends AbstractDriver {
 	@Override
 	protected List<Partition> split(Connection connection, String table) {
 		final String partitionTable = getPartitionTable(table);
+		log.info("get count of partitions of table {} with size {}", table, partitionSize);
 		final int partitionCount = getPartitionCount(connection, table);
+		log.info("create {} partitions", partitionCount);
 
 		dropPartitionTable(connection, partitionTable);
 		createPartitionTable(connection, table, partitionTable);
 		for (int i = 0; i < partitionCount; i++) {
 			final String partitionName = getPartitionTable(table, i);
+			log.info("create partition: {}", partitionName);
 			createPartition(connection, partitionTable, partitionName, i);
 		}
+		log.info("insert data");
 		insertData(connection, table, partitionTable, partitionCount);
 
+		log.info("read meta data");
 		return getPartitions(connection, table, partitionCount);
 	}
 
