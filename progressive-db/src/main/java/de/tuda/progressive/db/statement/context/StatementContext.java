@@ -5,7 +5,6 @@ import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 import java.util.List;
-import java.util.Map;
 
 public class StatementContext extends SimpleStatementContext {
 
@@ -20,10 +19,9 @@ public class StatementContext extends SimpleStatementContext {
 			SqlCreateTable createCache,
 			SqlInsert insertCache,
 			SqlSelect selectCache,
-			List<Aggregation> aggregations,
-			Map<MetaField, Integer> metaFieldPositions
+			List<MetaField> metaFields
 	) {
-		super(selectCache, aggregations, metaFieldPositions);
+		super(selectCache, metaFields);
 
 		this.selectSource = selectSource;
 		this.createCache = createCache;

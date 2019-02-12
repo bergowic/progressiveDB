@@ -1,7 +1,6 @@
 package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
-import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import org.apache.calcite.rel.type.RelDataType;
@@ -150,12 +149,19 @@ public class SqlUtils {
 	public static void setScale(PreparedStatement statement, SimpleStatementContext context, double progress) {
 		try {
 			int pos = 1;
-			for (Aggregation aggregation : context.getAggregations()) {
-				switch (aggregation) {
+			for (MetaField metaField : context.getMetaFields()) {
+				switch (metaField) {
 					case COUNT:
 					case SUM:
 						statement.setDouble(pos++, progress);
 						break;
+					case AVG:
+					case PROGRESS:
+					case PARTITION:
+						pos++;
+						break;
+					default:
+						throw new IllegalStateException("metaField not supported: " + metaField);
 				}
 			}
 		} catch (SQLException e) {
@@ -165,11 +171,11 @@ public class SqlUtils {
 	}
 
 	public static void setMetaFields(PreparedStatement statement, SimpleStatementContext context, Map<MetaField, Object> values) {
-		context.getMetaFieldPosition(MetaField.PARTITION).ifPresent(SqlUtils.consumer(pos -> {
+		context.getFunctionMetaFieldPos(MetaField.PARTITION, true).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setInt(pos + 1, (int) values.get(MetaField.PARTITION));
 		}));
 
-		context.getMetaFieldPosition(MetaField.PROGRESS).ifPresent(SqlUtils.consumer(pos -> {
+		context.getFunctionMetaFieldPos(MetaField.PROGRESS, true).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setDouble(pos + 1, (double) values.get(MetaField.PROGRESS));
 		}));
 	}

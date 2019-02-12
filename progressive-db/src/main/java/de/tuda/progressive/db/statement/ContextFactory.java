@@ -4,7 +4,6 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureIdentifier;
-import de.tuda.progressive.db.statement.context.Aggregation;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.SimpleStatementContext;
 import de.tuda.progressive.db.statement.context.StatementContext;
@@ -28,8 +27,6 @@ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,9 +35,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -61,13 +56,13 @@ public class ContextFactory {
 	public StatementContext create(Connection connection, DbDriver driver, SqlSelect select, Partition partition, String cacheTableName) {
 		try {
 			final List<SqlIdentifier> columnAliases = getColumnAliases(select.getSelectList());
-			final List<Aggregation> aggregations = getAggregations(select.getSelectList());
-			final SqlSelect sourceSelect = transformSelect(driver, select, aggregations);
+			final List<MetaField> metaFields = getMetaFields(select.getSelectList());
+			final SqlSelect sourceSelect = transformSelect(driver, select, metaFields);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
-			final Pair<SqlSelect, Map<MetaField, Integer>> selectCache = selectCache(cacheTableName, metaData, columnAliases, aggregations, sourceSelect.getGroup());
+			final SqlSelect selectCache = selectCache(cacheTableName, metaData, columnAliases, metaFields, sourceSelect.getGroup());
 
 			log.info("select source: {}", sourceSelect);
 
@@ -75,9 +70,8 @@ public class ContextFactory {
 					sourceSelect,
 					createCache,
 					insertCache,
-					selectCache.getLeft(),
-					aggregations,
-					selectCache.getRight()
+					selectCache,
+					metaFields
 			);
 		} catch (SQLException e) {
 			// TODO
@@ -101,7 +95,7 @@ public class ContextFactory {
 				select.getFetch()
 		);
 
-		return new SimpleStatementContext(viewSelect, context.getAggregations(), context.getMetaFieldPositions());
+		return new SimpleStatementContext(viewSelect, context.getMetaFields());
 	}
 
 	public StatementContext create(Connection connection, DbDriver driver, SqlCreateProgressiveView createProgressiveView) {
@@ -110,22 +104,21 @@ public class ContextFactory {
 
 		try {
 			final List<SqlIdentifier> columnAliases = getColumnAliases(select.getSelectList());
-			final List<Aggregation> aggregations = getAggregations(select.getSelectList());
-			final SqlSelect sourceSelect = transformSelect(driver, select, aggregations);
+			final List<MetaField> metaFields = getMetaFields(select.getSelectList());
+			final SqlSelect sourceSelect = transformSelect(driver, select, metaFields);
 			final int[] sourceSelectMapping = sortSelectList(driver, sourceSelect);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
 			final SqlCreateTable createCache = SqlUtils.createTable(driver, viewName, metaData);
 			final SqlInsert insertCache = insertCache(viewName, metaData);
-			final Pair<SqlSelect, Map<MetaField, Integer>> selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, aggregations, removeFutures(select.getGroup()));
+			final SqlSelect selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, metaFields, removeFutures(select.getGroup()));
 
 			return new StatementContext(
 					sourceSelect,
 					createCache,
 					insertCache,
-					selectCache.getLeft(),
-					aggregations,
-					selectCache.getRight()
+					selectCache,
+					metaFields
 			);
 		} catch (SQLException e) {
 			// TODO
@@ -149,26 +142,37 @@ public class ContextFactory {
 		}
 	}
 
-	private SqlSelect transformSelect(DbDriver driver, SqlSelect select, List<Aggregation> aggregations) {
+	private SqlSelect transformSelect(DbDriver driver, SqlSelect select, List<MetaField> metaFields) {
 		final SqlNodeList oldSelectList = select.getSelectList();
 		final SqlNodeList oldGroups = select.getGroup() == null ? SqlNodeList.EMPTY : select.getGroup();
 		SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
 		SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
 
 		for (int i = 0; i < oldSelectList.size(); i++) {
-			if (aggregations.get(i) == Aggregation.AVG) {
-				SqlBasicCall call = (SqlBasicCall) oldSelectList.get(i);
-				SqlBasicCall avg;
-				if (call.getKind() == SqlKind.AS) {
-					avg = (SqlBasicCall) call.getOperands()[0];
-				} else {
-					avg = call;
-				}
+			switch (metaFields.get(i)) {
+				case AVG:
+					SqlBasicCall call = (SqlBasicCall) oldSelectList.get(i);
+					SqlBasicCall avg;
+					if (call.getKind() == SqlKind.AS) {
+						avg = (SqlBasicCall) call.getOperands()[0];
+					} else {
+						avg = call;
+					}
 
-				selectList.add(createSumAggregation(avg.getOperands()));
-				selectList.add(createCountAggregation(avg.getOperands()));
-			} else {
-				selectList.add(oldSelectList.get(i));
+					selectList.add(createSumAggregation(avg.getOperands()));
+					selectList.add(createCountAggregation(avg.getOperands()));
+					break;
+				case COUNT:
+				case SUM:
+				case NONE:
+					selectList.add(oldSelectList.get(i));
+					break;
+				case PARTITION:
+				case PROGRESS:
+					// don't add anything
+					break;
+				default:
+					throw new IllegalArgumentException("metaField not supported: " + metaFields.get(i));
 			}
 		}
 
@@ -297,29 +301,34 @@ public class ContextFactory {
 		return (SqlIdentifier) call.operand(1);
 	}
 
-	private List<Aggregation> getAggregations(SqlNodeList columns) {
-		return get(columns, this::columnToAggregation);
+	private List<MetaField> getMetaFields(SqlNodeList columns) {
+		return get(columns, this::columnToMetaField);
 	}
 
-	private Aggregation columnToAggregation(SqlNode column) {
+	private MetaField columnToMetaField(SqlNode column) {
 		if (column instanceof SqlIdentifier || column instanceof SqlLiteral) {
-			return Aggregation.NONE;
+			return MetaField.NONE;
 		}
 		if (column instanceof SqlBasicCall) {
 			SqlBasicCall call = (SqlBasicCall) column;
 			SqlOperator operator = call.getOperator();
-			switch (operator.getKind()) {
-				case AVG:
-					return Aggregation.AVG;
-				case COUNT:
-					return Aggregation.COUNT;
-				case SUM:
-					return Aggregation.SUM;
-				case AS:
-					return columnToAggregation(call.getOperands()[0]);
+
+			switch (operator.getName().toUpperCase()) {
+				case "AVG":
+					return MetaField.AVG;
+				case "COUNT":
+					return MetaField.COUNT;
+				case "SUM":
+					return MetaField.SUM;
+				case "AS":
+					return columnToMetaField(call.getOperands()[0]);
+				case "PROGRESSIVE_PARTITION":
+					return MetaField.PARTITION;
+				case "PROGRESSIVE_PROGRESS":
+					return MetaField.PROGRESS;
 			}
 
-			throw new IllegalArgumentException("operation is not supported: " + operator.getKind());
+			throw new IllegalArgumentException("operation is not supported: " + operator.getName());
 		}
 
 		throw new IllegalArgumentException("column type is not supported: " + column.getClass());
@@ -352,112 +361,106 @@ public class ContextFactory {
 		);
 	}
 
-	private Pair<SqlSelect, Map<MetaField, Integer>> selectCache(
+	private SqlSelect selectCache(
 			String cacheTableName,
 			ResultSetMetaData metaData,
 			List<SqlIdentifier> columnAliases,
-			List<Aggregation> aggregations,
+			List<MetaField> metaFields,
 			SqlNodeList groups
 	) {
-		try {
-			int[] selectMapping = IntStream.range(0, metaData.getColumnCount()).toArray();
-			return selectCache(cacheTableName, metaData, selectMapping, columnAliases, aggregations, groups);
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
+		int[] selectMapping = IntStream.range(0, metaFields.size()).toArray();
+		return selectCache(cacheTableName, metaData, selectMapping, columnAliases, metaFields, groups);
 	}
 
-	private Pair<SqlSelect, Map<MetaField, Integer>> selectCache(
+	SqlSelect selectCache(
 			String cacheTableName,
 			ResultSetMetaData metaData,
 			int[] selectMapping,
 			List<SqlIdentifier> columnAliases,
-			List<Aggregation> aggregations,
+			List<MetaField> metaFields,
 			SqlNodeList groups
 	) {
 		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
-		final Map<MetaField, Integer> metaFieldPositions = new HashMap<>();
 
 		int i = 0;
 		int index = 0;
-		try {
-			for (int j = 0; j < columnAliases.size(); j++) {
-				final SqlIdentifier alias = columnAliases.get(j);
-				final Aggregation aggregation = aggregations.get(j);
+		for (int j = 0; j < columnAliases.size(); j++) {
+			final SqlIdentifier alias = columnAliases.get(j);
+			final MetaField metaField = metaFields.get(j);
 
-				final SqlIdentifier column = new SqlIdentifier(metaData.getColumnName(selectMapping[i] + 1), SqlParserPos.ZERO);
-				SqlNode newColumn = null;
+			SqlNode newColumn;
 
-				switch (aggregation) {
-					case NONE:
-						newColumn = column;
-						++i;
-						break;
-					case AVG:
-						final SqlIdentifier nextColumn = new SqlIdentifier(metaData.getColumnName(selectMapping[i + 1] + 1), SqlParserPos.ZERO);
-						newColumn = creatAvgAggregation(column, nextColumn);
-						i += 2;
-						break;
-					case COUNT:
-						newColumn = createCountPercentAggregation(index, column);
-						++i;
-						++index;
-						break;
-					case SUM:
-						newColumn = createSumPercentAggregation(index, column);
-						++i;
-						++index;
-						break;
-				}
-
-				selectList.add(alias == null ? newColumn : new SqlBasicCall(
-						SqlStdOperatorTable.AS,
-						new SqlNode[]{newColumn, alias},
-						SqlParserPos.ZERO
-				));
+			switch (metaField) {
+				case NONE:
+					newColumn = getColumnIdentifier(metaData, selectMapping[i]);
+					i++;
+					break;
+				case AVG:
+					newColumn = creatAvgAggregation(getColumnIdentifier(metaData, i), getColumnIdentifier(metaData, i + 1));
+					i += 2;
+					break;
+				case COUNT:
+					newColumn = createCountPercentAggregation(index, getColumnIdentifier(metaData, i));
+					i++;
+					index++;
+					break;
+				case SUM:
+					newColumn = createSumPercentAggregation(index, getColumnIdentifier(metaData, i));
+					i++;
+					index++;
+					break;
+				case PARTITION:
+					newColumn = createFunctionMetaField(index, "partition", SqlTypeName.INTEGER);
+					index++;
+					break;
+				case PROGRESS:
+					newColumn = createFunctionMetaField(index, "progress", SqlTypeName.FLOAT);
+					index++;
+					break;
+				default:
+					throw new IllegalArgumentException("metaField not handled: " + metaField);
 			}
-		} catch (SQLException e) {
-			// TODO
-			e.printStackTrace();
-			throw new RuntimeException(e);
+
+			selectList.add(alias == null ? newColumn : new SqlBasicCall(
+					SqlStdOperatorTable.AS,
+					new SqlNode[]{newColumn, alias},
+					SqlParserPos.ZERO
+			));
 		}
 
-		addMetaField(selectList, index, "partition", SqlTypeName.INTEGER);
-		metaFieldPositions.put(MetaField.PARTITION, index);
-
-		++index;
-
-		addMetaField(selectList, index, "progress", SqlTypeName.FLOAT);
-		metaFieldPositions.put(MetaField.PROGRESS, index);
-
-		return new ImmutablePair<>(
-				new SqlSelect(
-						SqlParserPos.ZERO,
-						null,
-						selectList,
-						new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
-						null,
-						groups,
-						null,
-						null,
-						null,
-						null,
-						null
-				),
-				metaFieldPositions
+		return new SqlSelect(
+				SqlParserPos.ZERO,
+				null,
+				selectList,
+				new SqlIdentifier(cacheTableName, SqlParserPos.ZERO),
+				null,
+				groups,
+				null,
+				null,
+				null,
+				null,
+				null
 		);
 	}
 
-	private void addMetaField(SqlNodeList selectList, int index, String name, SqlTypeName typeName) {
-		selectList.add(new SqlBasicCall(
+	private SqlIdentifier getColumnIdentifier(ResultSetMetaData metaData, int pos) {
+		try {
+			return new SqlIdentifier(metaData.getColumnName(pos + 1), SqlParserPos.ZERO);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	private SqlBasicCall createFunctionMetaField(int index, String name, SqlTypeName typeName) {
+		return new SqlBasicCall(
 				SqlStdOperatorTable.AS,
 				new SqlNode[]{
 						createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName),
 						new SqlIdentifier(name, SqlParserPos.ZERO)
 				},
 				SqlParserPos.ZERO
-		));
+		);
 	}
 
 	private static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {

@@ -3,6 +3,9 @@ package de.tuda.progressive.db.statement;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SqliteDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.StatementContext;
+import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.junit.jupiter.api.AfterAll;
@@ -16,6 +19,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -92,23 +97,37 @@ class ContextFactoryTest {
 								assertFalse(result.next());
 							}
 
-							switch (context.getAggregations().get(0)) {
-								case COUNT:
-								case SUM:
-									selectCacheStatement.setDouble(1, (double) (i + 1) / (double) expectedValues.length);
-									selectCacheStatement.setInt(2, i);
-									selectCacheStatement.setDouble(3, i / expectedValues.length);
-									break;
-								default:
-									selectCacheStatement.setInt(1, i);
-									selectCacheStatement.setDouble(2, i / expectedValues.length);
+							final List<MetaField> metaFields = context.getMetaFields();
+							for (int j = 0; j < metaFields.size(); j++) {
+								switch (metaFields.get(j)) {
+									case COUNT:
+									case SUM:
+										selectCacheStatement.setDouble(j + 1, (double) (i + 1) / (double) expectedValues.length);
+										break;
+								}
 							}
+
+							final int partition = i;
+							SqlUtils.setMetaFields(selectCacheStatement, context, new HashMap<MetaField, Object>() {{
+								put(MetaField.PARTITION, partition);
+								put(MetaField.PROGRESS, (double) (partition + 1) / (double) expectedValues.length);
+							}});
 
 							try (ResultSet result = selectCacheStatement.executeQuery()) {
 								assertTrue(result.next());
 
-								assertEquals(expectedValues[i], result.getInt(1));
-								assertEquals(i, result.getInt(2));
+								for (int j = 0; j < metaFields.size(); j++) {
+									switch (metaFields.get(j)) {
+										case AVG:
+										case COUNT:
+										case SUM:
+											assertEquals(expectedValues[i], result.getInt(j + 1));
+											break;
+									}
+								}
+
+								assertMetaFieldEquals(result, context, MetaField.PARTITION, i);
+								assertMetaFieldEquals(result, context, MetaField.PROGRESS, ((double) partition + 1) / (double) expectedValues.length);
 
 								assertFalse(result.next());
 							}
@@ -117,6 +136,12 @@ class ContextFactoryTest {
 				}
 			}
 		}
+	}
+
+	private void assertMetaFieldEquals(ResultSet result, StatementContext context, MetaField metaField, Object value) {
+		context.getFunctionMetaFieldPos(metaField, false).ifPresent(SqlUtils.consumer(pos -> {
+			assertEquals(value, result.getObject(pos + 1));
+		}));
 	}
 
 	@Test
@@ -163,6 +188,30 @@ class ContextFactoryTest {
 	void testSumWhere() throws Exception {
 		final String sql = String.format("select sum(a) from %s where c = 'a'", TABLE_NAME);
 		final int[] expectedValues = {4, 2};
+
+		testSingleAggregation(sql, expectedValues);
+	}
+
+	@Test
+	void testPartition() throws Exception {
+		final String sql = String.format("select count(a), progressive_partition() from %s", TABLE_NAME);
+		final int[] expectedValues = {2, 2};
+
+		testSingleAggregation(sql, expectedValues);
+	}
+
+	@Test
+	void testProgress() throws Exception {
+		final String sql = String.format("select avg(a), progressive_progress() from %s", TABLE_NAME);
+		final int[] expectedValues = {2, 5};
+
+		testSingleAggregation(sql, expectedValues);
+	}
+
+	@Test
+	void testOrder() throws Exception {
+		final String sql = String.format("select progressive_partition(), progressive_progress(), count(a) from %s", TABLE_NAME);
+		final int[] expectedValues = {2, 2};
 
 		testSingleAggregation(sql, expectedValues);
 	}
