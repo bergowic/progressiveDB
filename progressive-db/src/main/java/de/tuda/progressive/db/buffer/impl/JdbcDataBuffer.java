@@ -1,0 +1,101 @@
+package de.tuda.progressive.db.buffer.impl;
+
+import de.tuda.progressive.db.buffer.DataBuffer;
+import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.impl.JdbcContext;
+import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+
+abstract class JdbcDataBuffer implements DataBuffer {
+
+	protected final DbDriver driver;
+
+	protected final Connection connection;
+
+	private final JdbcContext context;
+
+	private final PreparedStatement selectBuffer;
+
+	JdbcDataBuffer(DbDriver driver, Connection connection, JdbcContext context) {
+		this.driver = driver;
+		this.connection = connection;
+		this.context = context;
+
+		createBuffer(context.getCreateBuffer());
+		this.selectBuffer = prepareSelectBuffer(context.getSelectBuffer());
+	}
+
+	private void createBuffer(SqlCreateTable create) {
+		final String sql = driver.toSql(create);
+		try (Statement statement = connection.createStatement()) {
+			statement.execute(sql);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	private PreparedStatement prepareSelectBuffer(SqlSelect select) {
+		final String sql = driver.toSql(select);
+		try {
+			return connection.prepareStatement(sql);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	@Override
+	public final void add(ResultSet result) {
+		try {
+			addInternal(result);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	protected abstract void addInternal(ResultSet result) throws SQLException;
+
+	@Override
+	public final List<Object[]> get(int partition, double progress) {
+		SqlUtils.setScale(selectBuffer, context.getMetaFields(), progress);
+		SqlUtils.setMetaFields(selectBuffer, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
+			put(MetaField.PARTITION, partition);
+			put(MetaField.PROGRESS, progress);
+		}});
+
+		final List<Object[]> results = new ArrayList<>();
+
+		try (ResultSet resultSet = selectBuffer.executeQuery()) {
+			while (resultSet.next()) {
+				Object[] row = new Object[selectBuffer.getMetaData().getColumnCount()];
+				for (int i = 1; i <= row.length; i++) {
+					row[i - 1] = resultSet.getObject(i);
+				}
+				results.add(row);
+			}
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+
+		return results;
+	}
+
+	@Override
+	public void close() throws Exception {
+		SqlUtils.closeSafe(selectBuffer);
+	}
+}

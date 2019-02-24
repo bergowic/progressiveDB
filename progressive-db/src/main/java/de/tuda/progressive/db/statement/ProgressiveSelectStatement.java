@@ -48,8 +48,8 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 			log.info("prepare cache query");
 			final double scale = (double) getReadPartitions() / (double) partitions.size();
 
-			SqlUtils.setScale(tmpSelectStatement, context, scale);
-			SqlUtils.setMetaFields(tmpSelectStatement, context, new HashMap<MetaField, Object>() {{
+			SqlUtils.setScale(tmpSelectStatement, context.getMetaFields(), scale);
+			SqlUtils.setMetaFields(tmpSelectStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
 				put(MetaField.PARTITION, getReadPartitions() - 1);
 				put(MetaField.PROGRESS, getProgress());
 			}});

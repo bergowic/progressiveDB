@@ -2,7 +2,7 @@ package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.SimpleStatementContext;
+import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
@@ -22,7 +22,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 public class SqlUtils {
@@ -146,14 +148,17 @@ public class SqlUtils {
 		return SqlTypeUtil.convertTypeToSpec(dataType);
 	}
 
-	public static void setScale(PreparedStatement statement, SimpleStatementContext context, double progress) {
+	public static void setScale(PreparedStatement statement, List<MetaField> metaFields, double progress) {
 		try {
 			int pos = 1;
-			for (MetaField metaField : context.getMetaFields()) {
+			for (MetaField metaField : metaFields) {
 				switch (metaField) {
 					case COUNT:
 					case SUM:
 						statement.setDouble(pos++, progress);
+						break;
+					case NONE:
+						// do nothing
 						break;
 					case AVG:
 					case PROGRESS:
@@ -170,12 +175,12 @@ public class SqlUtils {
 		}
 	}
 
-	public static void setMetaFields(PreparedStatement statement, SimpleStatementContext context, Map<MetaField, Object> values) {
-		context.getFunctionMetaFieldPos(MetaField.PARTITION, true).ifPresent(SqlUtils.consumer(pos -> {
+	public static void setMetaFields(PreparedStatement statement, Function2<MetaField, Boolean, Optional<Integer>> posFunction, Map<MetaField, Object> values) {
+		posFunction.apply(MetaField.PARTITION, true).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setInt(pos + 1, (int) values.get(MetaField.PARTITION));
 		}));
 
-		context.getFunctionMetaFieldPos(MetaField.PROGRESS, true).ifPresent(SqlUtils.consumer(pos -> {
+		posFunction.apply(MetaField.PROGRESS, true).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setDouble(pos + 1, (double) values.get(MetaField.PROGRESS));
 		}));
 	}

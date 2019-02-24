@@ -49,8 +49,8 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	@Override
 	public synchronized void handle(Partition partition) {
 		try {
-			SqlUtils.setScale(selectStatement, context, getProgress());
-			SqlUtils.setMetaFields(selectStatement, context, new HashMap<MetaField, Object>() {{
+			SqlUtils.setScale(selectStatement, context.getMetaFields(), getProgress());
+			SqlUtils.setMetaFields(selectStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
 				put(MetaField.PARTITION, getReadPartitions() - 1);
 				put(MetaField.PROGRESS, getProgress());
 			}});
