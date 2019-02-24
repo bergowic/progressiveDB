@@ -108,7 +108,7 @@ class ContextFactoryTest {
 							}
 
 							final int partition = i;
-							SqlUtils.setMetaFields(selectCacheStatement, context, new HashMap<MetaField, Object>() {{
+							SqlUtils.setMetaFields(selectCacheStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
 								put(MetaField.PARTITION, partition);
 								put(MetaField.PROGRESS, (double) (partition + 1) / (double) expectedValues.length);
 							}});
