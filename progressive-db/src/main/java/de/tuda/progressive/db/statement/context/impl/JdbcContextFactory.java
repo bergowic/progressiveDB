@@ -133,11 +133,6 @@ public class JdbcContextFactory extends ContextFactory<JdbcContext> {
 							index,
 							SqlUtils.getColumnIdentifier(metaData, i + 1)
 					);
-				/*	newColumn = SqlUtils.createCountPercentAggregation(
-							index,
-							SqlUtils.getColumnIdentifier(metaData, i + 1)
-					);
-				*/
 					i++;
 					index++;
 					break;
@@ -146,11 +141,6 @@ public class JdbcContextFactory extends ContextFactory<JdbcContext> {
 							index,
 							SqlUtils.getColumnIdentifier(metaData, i + 1)
 					);
-				/*	newColumn = SqlUtils.createSumPercentAggregation(
-							index,
-							SqlUtils.getColumnIdentifier(metaData, i + 1)
-					);
-				*/
 					i++;
 					index++;
 					break;
