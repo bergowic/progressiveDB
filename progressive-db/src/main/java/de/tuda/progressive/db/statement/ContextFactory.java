@@ -21,10 +21,8 @@ import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlValuesOperator;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.fun.SqlCountAggFunction;
 import org.apache.calcite.sql.fun.SqlRowOperator;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
@@ -159,8 +157,8 @@ public class ContextFactory {
 						avg = call;
 					}
 
-					selectList.add(createSumAggregation(avg.getOperands()));
-					selectList.add(createCountAggregation(avg.getOperands()));
+					selectList.add(SqlUtils.createSumAggregation(avg.getOperands()));
+					selectList.add(SqlUtils.createCountAggregation(avg.getOperands()));
 					break;
 				case COUNT:
 				case SUM:
@@ -392,29 +390,38 @@ public class ContextFactory {
 
 			switch (metaField) {
 				case NONE:
-					newColumn = getColumnIdentifier(metaData, selectMapping[i]);
+					newColumn = SqlUtils.getColumnIdentifier(metaData, selectMapping[i] + 1);
 					i++;
 					break;
 				case AVG:
-					newColumn = creatAvgAggregation(getColumnIdentifier(metaData, i), getColumnIdentifier(metaData, i + 1));
+					newColumn = SqlUtils.createAvgAggregation(
+							SqlUtils.getColumnIdentifier(metaData, i + 1),
+							SqlUtils.getColumnIdentifier(metaData, i + 2)
+					);
 					i += 2;
 					break;
 				case COUNT:
-					newColumn = createCountPercentAggregation(index, getColumnIdentifier(metaData, i));
+					newColumn = SqlUtils.createCountPercentAggregation(
+							index,
+							SqlUtils.getColumnIdentifier(metaData, i + 1)
+					);
 					i++;
 					index++;
 					break;
 				case SUM:
-					newColumn = createSumPercentAggregation(index, getColumnIdentifier(metaData, i));
+					newColumn = SqlUtils.createSumPercentAggregation(
+							index,
+							SqlUtils.getColumnIdentifier(metaData, i + 1)
+					);
 					i++;
 					index++;
 					break;
 				case PARTITION:
-					newColumn = createFunctionMetaField(index, "partition", SqlTypeName.INTEGER);
+					newColumn = SqlUtils.createFunctionMetaField(index, "partition", SqlTypeName.INTEGER);
 					index++;
 					break;
 				case PROGRESS:
-					newColumn = createFunctionMetaField(index, "progress", SqlTypeName.FLOAT);
+					newColumn = SqlUtils.createFunctionMetaField(index, "progress", SqlTypeName.FLOAT);
 					index++;
 					break;
 				default:
@@ -441,80 +448,5 @@ public class ContextFactory {
 				null,
 				null
 		);
-	}
-
-	private SqlIdentifier getColumnIdentifier(ResultSetMetaData metaData, int pos) {
-		try {
-			return new SqlIdentifier(metaData.getColumnName(pos + 1), SqlParserPos.ZERO);
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
-
-	private SqlBasicCall createFunctionMetaField(int index, String name, SqlTypeName typeName) {
-		return new SqlBasicCall(
-				SqlStdOperatorTable.AS,
-				new SqlNode[]{
-						createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName),
-						new SqlIdentifier(name, SqlParserPos.ZERO)
-				},
-				SqlParserPos.ZERO
-		);
-	}
-
-	private static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {
-		return new SqlBasicCall(
-				SqlStdOperatorTable.CAST,
-				new SqlNode[]{
-						node,
-						SqlUtils.getDataType(typeName)
-				},
-				SqlParserPos.ZERO
-		);
-	}
-
-	private static SqlBasicCall creatAvgAggregation(SqlNode operand1, SqlNode operand2) {
-		return new SqlBasicCall(
-				SqlStdOperatorTable.DIVIDE,
-				new SqlNode[]{
-						createCast(createSumAggregation(operand1), SqlTypeName.FLOAT),
-						createCast(createSumAggregation(operand2), SqlTypeName.FLOAT)
-				},
-				SqlParserPos.ZERO);
-	}
-
-	private static SqlBasicCall createCountAggregation(SqlNode... operands) {
-		return new SqlBasicCall(
-				new SqlCountAggFunction("COUNT"),
-				operands,
-				SqlParserPos.ZERO
-		);
-	}
-
-	private static SqlBasicCall createCountPercentAggregation(int index, SqlNode operand) {
-		return createPercentAggregation(index, createSumAggregation(operand));
-	}
-
-	private static SqlBasicCall createSumAggregation(SqlNode... operands) {
-		return new SqlBasicCall(
-				new SqlSumAggFunction(null),
-				operands,
-				SqlParserPos.ZERO
-		);
-	}
-
-	private static SqlBasicCall createSumPercentAggregation(int index, SqlNode operand) {
-		return createPercentAggregation(index, createSumAggregation(operand));
-	}
-
-	private static SqlBasicCall createPercentAggregation(int index, SqlBasicCall aggregation) {
-		return new SqlBasicCall(
-				SqlStdOperatorTable.DIVIDE,
-				new SqlNode[]{
-						aggregation,
-						new SqlDynamicParam(index, SqlParserPos.ZERO)
-				},
-				SqlParserPos.ZERO);
 	}
 }

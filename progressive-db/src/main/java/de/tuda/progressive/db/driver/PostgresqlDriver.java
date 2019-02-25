@@ -140,6 +140,11 @@ public class PostgresqlDriver extends AbstractDriver {
 		}
 	}
 
+	@Override
+	public boolean hasUpsert() {
+		return true;
+	}
+
 	public static class Builder {
 		private final PostgresqlDriver driver;
 

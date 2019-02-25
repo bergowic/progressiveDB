@@ -39,4 +39,9 @@ public class SqliteDriver extends AbstractDriver {
 		//TODO
 		return table;
 	}
+
+	@Override
+	public boolean hasUpsert() {
+		return true;
+	}
 }

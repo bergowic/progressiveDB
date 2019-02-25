@@ -1,17 +1,12 @@
 package de.tuda.progressive.db.sql.parser;
 
-import org.apache.calcite.sql.SqlBasicCall;
-import org.apache.calcite.sql.SqlIdentifier;
+import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlOperator;
 import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.SqlWriter;
-import org.apache.calcite.sql.fun.SqlRowOperator;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.util.Pair;
 
 public class SqlUpsert extends SqlInsert {
 
@@ -31,15 +26,7 @@ public class SqlUpsert extends SqlInsert {
 				pos,
 				SqlNodeList.EMPTY,
 				targetTable,
-				new SqlBasicCall(
-						SqlStdOperatorTable.VALUES,
-						new SqlNode[]{new SqlBasicCall(
-								new SqlRowOperator(" "),
-								values,
-								SqlParserPos.ZERO
-						)},
-						SqlParserPos.ZERO
-				),
+				SqlUtils.getValues(values),
 				columnList
 		);
 

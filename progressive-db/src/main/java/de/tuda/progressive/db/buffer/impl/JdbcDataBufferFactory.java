@@ -5,7 +5,6 @@ import de.tuda.progressive.db.buffer.DataBufferFactory;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcContext;
-import de.tuda.progressive.db.statement.context.impl.JdbcUpsertContext;
 import de.tuda.progressive.db.util.SqlUtils;
 
 import javax.sql.DataSource;
@@ -39,7 +38,7 @@ public class JdbcDataBufferFactory implements DataBufferFactory<JdbcContext> {
 	@Override
 	public DataBuffer create(JdbcContext context) {
 		Connection connection = null;
-		DbDriver driver = null;
+		DbDriver driver;
 
 		try {
 			connection = getConnection();
@@ -54,11 +53,7 @@ public class JdbcDataBufferFactory implements DataBufferFactory<JdbcContext> {
 	}
 
 	private DataBuffer create(DbDriver driver, Connection connection, JdbcContext context) {
-		if (context instanceof JdbcUpsertContext) {
-			return new JdbcUpsertDataBuffer(driver, connection, (JdbcUpsertContext) context);
-		}
-
-		throw new IllegalArgumentException("context not supported: " + context.getClass());
+		return new JdbcDataBuffer(driver, connection, context);
 	}
 
 	private Connection getConnection() {

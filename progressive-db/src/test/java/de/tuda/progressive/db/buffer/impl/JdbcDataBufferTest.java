@@ -4,7 +4,7 @@ import de.tuda.progressive.db.Utils;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SqliteDriver;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.impl.JdbcUpsertContext;
+import de.tuda.progressive.db.statement.context.impl.JdbcContext;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.junit.jupiter.api.AfterAll;
@@ -22,7 +22,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-class JdbcUpsertDataBufferTest {
+class JdbcDataBufferTest {
 
 	private static final DbDriver driver = SqliteDriver.INSTANCE;
 
@@ -62,8 +62,8 @@ class JdbcUpsertDataBufferTest {
 		}
 	}
 
-	private void test(JdbcUpsertContext context, List<List<Object[]>> expected) throws SQLException {
-		final JdbcDataBuffer buffer = new JdbcUpsertDataBuffer(driver, connection, context);
+	private void test(JdbcContext context, List<List<Object[]>> expected) throws SQLException {
+		final JdbcDataBuffer buffer = new JdbcDataBuffer(driver, connection, context);
 
 		try (Statement statement = connection.createStatement()) {
 			try (ResultSet result = statement.executeQuery(driver.toSql(context.getSelectSource()))) {
@@ -93,16 +93,16 @@ class JdbcUpsertDataBufferTest {
 		}
 	}
 
-	private JdbcUpsertContext.Builder builder() {
-		return new JdbcUpsertContext.Builder()
+	private JdbcContext.Builder builder() {
+		return new JdbcContext.Builder()
 				.selectSource(parse("select a, b, c, d from t"))
 				.createBuffer(Utils.createTable("b", 4, 2))
-				.upsertBuffer(Utils.createUpsert("b", 4, 2));
+				.insertBuffer(Utils.createUpsert("b", 4, 2));
 	}
 
 	@Test
 	void testSum() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.SUM, MetaField.SUM, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select cast(a as float) / ?, cast(b as float) / ?, c, d from b"))
 				.build();
@@ -117,7 +117,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testCount() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.COUNT, MetaField.COUNT, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select cast(a as float) / ?, cast(b as float) / ?, c, d from b"))
 				.build();
@@ -132,7 +132,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testAvg() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.AVG, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select cast(a as float) / cast(b as float), c, d from b"))
 				.build();
@@ -147,7 +147,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testSumProgress() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.PROGRESS, MetaField.SUM, MetaField.SUM, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select ?, cast(a as float) / ?, cast(b as float) / ?, c, d from b"))
 				.build();
@@ -166,7 +166,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testCountProgress() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.PROGRESS, MetaField.COUNT, MetaField.COUNT, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select ?, cast(a as float) / ?, cast(b as float) / ?, c, d from b"))
 				.build();
@@ -185,7 +185,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testAvgProgress() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.PROGRESS, MetaField.AVG, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select ?, cast(a as float) / cast(b as float), c, d from b"))
 				.build();
@@ -204,7 +204,7 @@ class JdbcUpsertDataBufferTest {
 
 	@Test
 	void testPartition() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.PARTITION, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select ?, c, d from b"))
 				.build();
@@ -222,7 +222,7 @@ class JdbcUpsertDataBufferTest {
 	}
 
 	void test() throws Throwable {
-		final JdbcUpsertContext context = builder()
+		final JdbcContext context = builder()
 				.metaFields(Arrays.asList(MetaField.SUM, MetaField.SUM, MetaField.NONE, MetaField.NONE))
 				.selectBuffer(parse("select a / ?, b / ?, c, d from b"))
 				.build();

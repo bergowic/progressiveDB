@@ -5,7 +5,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.JdbcContext;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
 import java.sql.Connection;
@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-abstract class JdbcDataBuffer implements DataBuffer {
+class JdbcDataBuffer implements DataBuffer {
 
 	protected final DbDriver driver;
 
@@ -25,7 +25,12 @@ abstract class JdbcDataBuffer implements DataBuffer {
 
 	private final JdbcContext context;
 
+	private final PreparedStatement insertBuffer;
+
+	private final PreparedStatement updateBuffer;
+
 	private final PreparedStatement selectBuffer;
+
 
 	JdbcDataBuffer(DbDriver driver, Connection connection, JdbcContext context) {
 		this.driver = driver;
@@ -33,7 +38,9 @@ abstract class JdbcDataBuffer implements DataBuffer {
 		this.context = context;
 
 		createBuffer(context.getCreateBuffer());
-		this.selectBuffer = prepareSelectBuffer(context.getSelectBuffer());
+		this.insertBuffer = prepare(context.getInsertBuffer());
+		this.updateBuffer = prepare(context.getUpdateBuffer());
+		this.selectBuffer = prepare(context.getSelectBuffer());
 	}
 
 	private void createBuffer(SqlCreateTable create) {
@@ -46,8 +53,12 @@ abstract class JdbcDataBuffer implements DataBuffer {
 		}
 	}
 
-	private PreparedStatement prepareSelectBuffer(SqlSelect select) {
-		final String sql = driver.toSql(select);
+	private PreparedStatement prepare(SqlCall call) {
+		if (call == null) {
+			return null;
+		}
+
+		final String sql = driver.toSql(call);
 		try {
 			return connection.prepareStatement(sql);
 		} catch (SQLException e) {
@@ -66,7 +77,19 @@ abstract class JdbcDataBuffer implements DataBuffer {
 		}
 	}
 
-	protected abstract void addInternal(ResultSet result) throws SQLException;
+	private void addInternal(ResultSet result) throws SQLException {
+		final int internalCount = result.getMetaData().getColumnCount();
+
+		// TODO execute update if exists
+
+		while (!result.isClosed() && result.next()) {
+			for (int i = 1; i <= internalCount; i++) {
+				insertBuffer.setObject(i, result.getObject(i));
+				insertBuffer.setObject(i + internalCount, result.getObject(i));
+			}
+			insertBuffer.executeUpdate();
+		}
+	}
 
 	@Override
 	public final List<Object[]> get(int partition, double progress) {
@@ -96,6 +119,8 @@ abstract class JdbcDataBuffer implements DataBuffer {
 
 	@Override
 	public void close() throws Exception {
+		SqlUtils.closeSafe(insertBuffer);
+		SqlUtils.closeSafe(updateBuffer);
 		SqlUtils.closeSafe(selectBuffer);
 	}
 }

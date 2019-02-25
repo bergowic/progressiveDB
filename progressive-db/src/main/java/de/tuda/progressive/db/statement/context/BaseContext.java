@@ -63,9 +63,9 @@ public abstract class BaseContext {
 		}
 
 		public final C build() {
-			return (C) build(selectSource, metaFields);
+			return build(selectSource, metaFields);
 		}
 
-		protected abstract BaseContext build(SqlSelect selectSource, List<MetaField> metaFields);
+		protected abstract C build(SqlSelect selectSource, List<MetaField> metaFields);
 	}
 }

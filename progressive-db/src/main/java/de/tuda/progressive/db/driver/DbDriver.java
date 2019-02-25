@@ -15,4 +15,6 @@ public interface DbDriver {
 	void prepareTable(Connection connection, String table, MetaData metaData);
 
 	String getPartitionTable(String table);
+
+	boolean hasUpsert();
 }

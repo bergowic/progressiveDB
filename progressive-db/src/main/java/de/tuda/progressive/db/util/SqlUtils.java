@@ -6,13 +6,19 @@ import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeSystem;
+import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlDataTypeSpec;
+import org.apache.calcite.sql.SqlDynamicParam;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.ddl.SqlDropTable;
+import org.apache.calcite.sql.fun.SqlCountAggFunction;
+import org.apache.calcite.sql.fun.SqlRowOperator;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.fun.SqlSumAggFunction;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -183,5 +189,88 @@ public class SqlUtils {
 		posFunction.apply(MetaField.PROGRESS, true).ifPresent(SqlUtils.consumer(pos -> {
 			statement.setDouble(pos + 1, (double) values.get(MetaField.PROGRESS));
 		}));
+	}
+
+	public static SqlBasicCall createFunctionMetaField(int index, String name, SqlTypeName typeName) {
+		return new SqlBasicCall(
+				SqlStdOperatorTable.AS,
+				new SqlNode[]{
+						createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName),
+						new SqlIdentifier(name, SqlParserPos.ZERO)
+				},
+				SqlParserPos.ZERO
+		);
+	}
+
+	public static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {
+		return new SqlBasicCall(
+				SqlStdOperatorTable.CAST,
+				new SqlNode[]{
+						node,
+						SqlUtils.getDataType(typeName)
+				},
+				SqlParserPos.ZERO
+		);
+	}
+
+	public static SqlBasicCall createAvgAggregation(SqlNode op1, SqlNode op2) {
+		return getDivide(createCast(op1, SqlTypeName.FLOAT), createCast(op2, SqlTypeName.FLOAT));
+	}
+
+	public static SqlBasicCall createCountAggregation(SqlNode... operands) {
+		return new SqlBasicCall(
+				new SqlCountAggFunction("COUNT"),
+				operands,
+				SqlParserPos.ZERO
+		);
+	}
+
+	public static SqlBasicCall createCountPercentAggregation(int index, SqlNode operand) {
+		return createPercentAggregation(index, createSumAggregation(operand));
+	}
+
+	public static SqlBasicCall createSumAggregation(SqlNode... operands) {
+		return new SqlBasicCall(
+				new SqlSumAggFunction(null),
+				operands,
+				SqlParserPos.ZERO
+		);
+	}
+
+	public static SqlBasicCall createSumPercentAggregation(int index, SqlNode operand) {
+		return createPercentAggregation(index, createSumAggregation(operand));
+	}
+
+	public static SqlBasicCall createPercentAggregation(int index, SqlNode aggregation) {
+		return getDivide(aggregation, new SqlDynamicParam(index, SqlParserPos.ZERO));
+	}
+
+	private static SqlBasicCall getDivide(SqlNode op1, SqlNode op2) {
+		return new SqlBasicCall(
+				SqlStdOperatorTable.DIVIDE,
+				new SqlNode[]{op1, op2},
+				SqlParserPos.ZERO
+		);
+	}
+
+	public static SqlIdentifier getColumnIdentifier(ResultSetMetaData metaData, int pos) {
+		try {
+			return new SqlIdentifier(metaData.getColumnName(pos), SqlParserPos.ZERO);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	public static SqlBasicCall getValues(SqlNode[] values) {
+		return new SqlBasicCall(
+				SqlStdOperatorTable.VALUES,
+				new SqlNode[]{new SqlBasicCall(
+						new SqlRowOperator(" "),
+						values,
+						SqlParserPos.ZERO
+				)},
+				SqlParserPos.ZERO
+		);
 	}
 }
