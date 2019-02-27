@@ -2,8 +2,8 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
-import de.tuda.progressive.db.statement.context.SimpleStatementContext;
-import de.tuda.progressive.db.statement.context.StatementContext;
+import de.tuda.progressive.db.statement.old.context.SimpleStatementContext;
+import de.tuda.progressive.db.statement.old.context.StatementContext;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -27,7 +27,7 @@ public class ProgressiveViewStatement extends ProgressiveBaseStatement {
 			StatementContext context,
 			List<Partition> partitions
 	) {
-		super(driver, connection, tmpConnection, context, partitions);
+		super(driver, connection, null, null, partitions);
 	}
 
 	@Override
@@ -68,7 +68,4 @@ public class ProgressiveViewStatement extends ProgressiveBaseStatement {
 		listeners.remove(listener);
 	}
 
-	public void setSimpleContext(SimpleStatementContext simpleContext) {
-		super.setSimpleContext(simpleContext);
-	}
 }

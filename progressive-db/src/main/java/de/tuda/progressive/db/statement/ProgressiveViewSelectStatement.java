@@ -3,7 +3,7 @@ package de.tuda.progressive.db.statement;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.SimpleStatementContext;
+import de.tuda.progressive.db.statement.old.context.SimpleStatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
 
 import java.sql.Connection;
@@ -113,10 +113,5 @@ public class ProgressiveViewSelectStatement implements ProgressiveStatement, Pro
 	@Override
 	public void close() {
 		viewStatement.removeListener(this);
-	}
-
-	@Override
-	public SimpleStatementContext getContext() {
-		return context;
 	}
 }

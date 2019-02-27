@@ -1,9 +1,11 @@
 package de.tuda.progressive.db.statement;
 
+import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.statement.context.BaseContext;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.StatementContext;
+import de.tuda.progressive.db.statement.old.context.StatementContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,57 +23,32 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 
 	private static final Logger log = LoggerFactory.getLogger(ProgressiveSelectStatement.class);
 
-	private final StatementContext context;
-
-	private final List<Partition> partitions;
+	private final DataBuffer dataBuffer;
 
 	private List<Object[]> results = new ArrayList<>();
 
 	public ProgressiveSelectStatement(
 			DbDriver driver,
 			Connection connection,
-			Connection tmpConnection,
-			StatementContext context,
+			BaseContext context,
+			DataBuffer dataBuffer,
 			List<Partition> partitions
 	) {
-		super(driver, connection, tmpConnection, context, partitions);
+		super(driver, connection, context, dataBuffer, partitions);
 
-		this.context = context;
-		this.partitions = partitions;
+		this.dataBuffer = dataBuffer;
 	}
 
 	@Override
 	protected synchronized void queryHandled(Partition partition) {
-		final PreparedStatement tmpSelectStatement = getTmpSelectStatement();
+		log.info("run cache query");
 
-		try {
-			log.info("prepare cache query");
-			final double scale = (double) getReadPartitions() / (double) partitions.size();
+		List<Object[]> rows = dataBuffer.get(getReadPartitions(), getProgress());
+		results.addAll(rows);
 
-			SqlUtils.setScale(tmpSelectStatement, context.getMetaFields(), scale);
-			SqlUtils.setMetaFields(tmpSelectStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
-				put(MetaField.PARTITION, getReadPartitions() - 1);
-				put(MetaField.PROGRESS, getProgress());
-			}});
+		log.info("cache results received");
 
-			log.info("run cache query");
-
-			ResultSet resultSet = tmpSelectStatement.executeQuery();
-			while (resultSet.next()) {
-				Object[] row = new Object[metaData.getColumnCount()];
-				for (int i = 1; i <= row.length; i++) {
-					row[i - 1] = resultSet.getObject(i);
-				}
-				results.add(row);
-			}
-
-			log.info("cache results received");
-
-			notify();
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
+		notify();
 	}
 
 	@Override

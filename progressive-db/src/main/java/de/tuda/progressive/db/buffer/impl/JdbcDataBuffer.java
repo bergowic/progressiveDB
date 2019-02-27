@@ -2,6 +2,7 @@ package de.tuda.progressive.db.buffer.impl;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.statement.ResultSetMetaDataWrapper;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.JdbcContext;
 import de.tuda.progressive.db.util.SqlUtils;
@@ -11,6 +12,7 @@ import org.apache.calcite.sql.ddl.SqlCreateTable;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
@@ -31,6 +33,7 @@ class JdbcDataBuffer implements DataBuffer {
 
 	private final PreparedStatement selectBuffer;
 
+	private final ResultSetMetaData metaData;
 
 	JdbcDataBuffer(DbDriver driver, Connection connection, JdbcContext context) {
 		this.driver = driver;
@@ -41,6 +44,7 @@ class JdbcDataBuffer implements DataBuffer {
 		this.insertBuffer = prepare(context.getInsertBuffer());
 		this.updateBuffer = prepare(context.getUpdateBuffer());
 		this.selectBuffer = prepare(context.getSelectBuffer());
+		this.metaData = getMetaData(selectBuffer);
 	}
 
 	private void createBuffer(SqlCreateTable create) {
@@ -61,6 +65,15 @@ class JdbcDataBuffer implements DataBuffer {
 		final String sql = driver.toSql(call);
 		try {
 			return connection.prepareStatement(sql);
+		} catch (SQLException e) {
+			// TODO
+			throw new RuntimeException(e);
+		}
+	}
+
+	private ResultSetMetaData getMetaData(PreparedStatement statement) {
+		try {
+			return new ResultSetMetaDataWrapper(statement.getMetaData());
 		} catch (SQLException e) {
 			// TODO
 			throw new RuntimeException(e);
@@ -122,5 +135,10 @@ class JdbcDataBuffer implements DataBuffer {
 		SqlUtils.closeSafe(insertBuffer);
 		SqlUtils.closeSafe(updateBuffer);
 		SqlUtils.closeSafe(selectBuffer);
+	}
+
+	@Override
+	public ResultSetMetaData getMetaData() {
+		return metaData;
 	}
 }

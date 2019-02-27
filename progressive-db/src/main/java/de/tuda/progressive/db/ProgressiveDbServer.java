@@ -1,11 +1,13 @@
 package de.tuda.progressive.db;
 
+import de.tuda.progressive.db.buffer.DataBufferFactory;
+import de.tuda.progressive.db.buffer.impl.JdbcDataBufferFactory;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.meta.jdbc.JdbcMetaData;
-import de.tuda.progressive.db.statement.ProgressiveStatementFactory;
-import de.tuda.progressive.db.statement.SimpleStatementFactory;
+import de.tuda.progressive.db.statement.context.ContextFactory;
+import de.tuda.progressive.db.statement.context.impl.JdbcContextFactory;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.Service;
@@ -173,14 +175,19 @@ public class ProgressiveDbServer {
 			log.info("starting");
 
 			Connection connection = DriverManager.getConnection(sourceUrl, sourceProperties);
-			Connection tmpConnection = DriverManager.getConnection(tmpUrl, tmpProperties);
-			MetaData metaData = new JdbcMetaData(metaUrl, metaProperties);
 
-			ProgressiveHandler progressiveHandler = new ProgressiveHandler(
+			final DbDriver sourceDriver = DbDriverFactory.create(sourceUrl);
+			final DbDriver bufferDriver = DbDriverFactory.create(tmpUrl);
+			final ContextFactory contextFactory = createContextFactory(sourceDriver, bufferDriver);
+			final DataBufferFactory dataBufferFactory = createDataBufferFactory(tmpUrl, tmpProperties);
+			final MetaData metaData = new JdbcMetaData(metaUrl, metaProperties);
+
+			final ProgressiveHandler progressiveHandler = new ProgressiveHandler(
 					DbDriverFactory.create(sourceUrl),
 					connection,
-					tmpConnection,
-					metaData
+					metaData,
+					contextFactory,
+					dataBufferFactory
 			);
 
 			Meta meta = new ProgressiveMeta(sourceUrl, sourceProperties, progressiveHandler);
@@ -204,6 +211,14 @@ public class ProgressiveDbServer {
 				}
 			}).start();
 		}
+	}
+
+	private ContextFactory createContextFactory(DbDriver sourceDriver, DbDriver bufferDriver) {
+		return new JdbcContextFactory(sourceDriver, bufferDriver);
+	}
+
+	private DataBufferFactory createDataBufferFactory(String url, Properties properties) {
+		return new JdbcDataBufferFactory(url, properties);
 	}
 
 	public synchronized void stop() {

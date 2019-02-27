@@ -1,9 +1,9 @@
 package de.tuda.progressive.db.statement;
 
+import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
-import de.tuda.progressive.db.statement.context.SimpleStatementContext;
-import de.tuda.progressive.db.statement.context.StatementContext;
+import de.tuda.progressive.db.statement.context.BaseContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,7 +13,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -24,47 +23,32 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
 	private static final ExecutorService executor = Executors.newCachedThreadPool();
 
-	private final DbDriver driver;
-
 	private final List<Partition> partitions;
 
-	private final Connection tmpConnection;
-
 	private PreparedStatement preparedStatement;
-
-	private PreparedStatement tmpInsertStatement;
-
-	private PreparedStatement tmpSelectStatement;
-
-	private SimpleStatementContext simpleContext;
 
 	private int readPartitions;
 
 	protected final ResultSetMetaData metaData;
+
+	private final DataBuffer dataBuffer;
 
 	private boolean isClosed;
 
 	public ProgressiveBaseStatement(
 			DbDriver driver,
 			Connection connection,
-			Connection tmpConnection,
-			StatementContext context,
+			BaseContext context,
+			DataBuffer dataBuffer,
 			List<Partition> partitions
 	) {
-		this.driver = driver;
+		this.dataBuffer = dataBuffer;
 		this.partitions = partitions;
-		this.tmpConnection = tmpConnection;
 
 		try {
-			try (Statement statement = tmpConnection.createStatement()) {
-				statement.execute(driver.toSql(context.getCreateCache()));
-			}
-
 			preparedStatement = connection.prepareStatement(driver.toSql(context.getSelectSource()));
-			tmpInsertStatement = tmpConnection.prepareStatement(driver.toSql(context.getInsertCache()));
-			setSimpleContext(context);
 
-			metaData = new ResultSetMetaDataWrapper(tmpSelectStatement.getMetaData());
+			metaData = dataBuffer.getMetaData();
 		} catch (SQLException e) {
 			// TODO
 			throw new RuntimeException(e);
@@ -104,7 +88,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 			ResultSet resultSet = preparedStatement.executeQuery();
 
 			log.info("data received");
-			addResult(resultSet, partition);
+			dataBuffer.add(resultSet);
 			log.info("received data handled");
 
 			synchronized (this) {
@@ -119,23 +103,6 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 	}
 
 	protected abstract void queryHandled(Partition partition);
-
-	private void addResult(ResultSet resultSet, Partition partition) {
-		try {
-			int internalCount = preparedStatement.getMetaData().getColumnCount();
-			while (!resultSet.isClosed() && resultSet.next()) {
-				for (int i = 1; i < internalCount; i++) {
-					tmpInsertStatement.setObject(i, resultSet.getObject(i));
-				}
-				tmpInsertStatement.setInt(internalCount, partition.getId());
-				tmpInsertStatement.executeUpdate();
-			}
-		} catch (SQLException e) {
-			//TODO
-			e.printStackTrace();
-//			throw new RuntimeException(e);
-		}
-	}
 
 	@Override
 	public ResultSetMetaData getMetaData() {
@@ -152,8 +119,6 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 		isClosed = true;
 
 		SqlUtils.closeSafe(preparedStatement);
-		SqlUtils.closeSafe(tmpInsertStatement);
-		SqlUtils.closeSafe(tmpSelectStatement);
 	}
 
 	@Override
@@ -164,25 +129,5 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 	@Override
 	public synchronized double getProgress() {
 		return (double) readPartitions / (double) partitions.size();
-	}
-
-	protected PreparedStatement getTmpSelectStatement() {
-		return tmpSelectStatement;
-	}
-
-	protected void setSimpleContext(SimpleStatementContext context) {
-		this.simpleContext = context;
-
-		try {
-			tmpSelectStatement = tmpConnection.prepareStatement(driver.toSql(context.getSelectCache()));
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
-
-	@Override
-	public SimpleStatementContext getContext() {
-		return simpleContext;
 	}
 }

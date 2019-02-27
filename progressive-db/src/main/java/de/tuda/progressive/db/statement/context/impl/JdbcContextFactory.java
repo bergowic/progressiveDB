@@ -258,7 +258,7 @@ public class JdbcContextFactory extends ContextFactory<JdbcContext> {
 
 		for (SqlNode group : groups) {
 			if (group instanceof SqlIdentifier) {
-				if (column.equals(((SqlIdentifier) group).getSimple())) {
+				if (column.equalsIgnoreCase(((SqlIdentifier) group).getSimple())) {
 					return true;
 				}
 			}

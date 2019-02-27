@@ -11,10 +11,13 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.Properties;
 
 public class JdbcDataBufferFactory implements DataBufferFactory<JdbcContext> {
 
 	private final String url;
+
+	private final Properties properties;
 
 	private final DataSource dataSource;
 
@@ -22,16 +25,21 @@ public class JdbcDataBufferFactory implements DataBufferFactory<JdbcContext> {
 		this(url, null);
 	}
 
-	public JdbcDataBufferFactory(DataSource dataSource) {
-		this(null, dataSource);
+	public JdbcDataBufferFactory(String url, Properties properties) {
+		this(url, properties, null);
 	}
 
-	private JdbcDataBufferFactory(String url, DataSource dataSource) {
+	public JdbcDataBufferFactory(DataSource dataSource) {
+		this(null, null, dataSource);
+	}
+
+	private JdbcDataBufferFactory(String url, Properties properties, DataSource dataSource) {
 		if (url == null && dataSource == null) {
 			throw new IllegalArgumentException("set either url or dataSource");
 		}
 
 		this.url = url;
+		this.properties = properties;
 		this.dataSource = dataSource;
 	}
 
@@ -59,7 +67,7 @@ public class JdbcDataBufferFactory implements DataBufferFactory<JdbcContext> {
 	private Connection getConnection() {
 		try {
 			if (url != null) {
-				return DriverManager.getConnection(url);
+				return DriverManager.getConnection(url, properties);
 			}
 			if (dataSource != null) {
 				return dataSource.getConnection();
