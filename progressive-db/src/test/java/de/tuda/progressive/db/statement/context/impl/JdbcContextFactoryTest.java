@@ -149,21 +149,11 @@ class JdbcContextFactoryTest {
 								try (ResultSet result = selectBufferStatement.executeQuery()) {
 									for (Object[] expectedRow : expectedValues.get(i)) {
 										assertTrue(result.next());
+										assertEquals(expectedRow.length, result.getMetaData().getColumnCount());
 
-										int pos = 0;
 										for (int j = 0; j < metaFields.size(); j++) {
-											switch (metaFields.get(j)) {
-												case AVG:
-												case COUNT:
-												case SUM:
-												case NONE:
-													assertEquals(expectedRow[pos++], result.getObject(j + 1));
-													break;
-											}
+											assertEquals(expectedRow[j], result.getObject(j + 1));
 										}
-
-										assertMetaFieldEquals(result, context, MetaField.PARTITION, i);
-										assertMetaFieldEquals(result, context, MetaField.PROGRESS, ((double) partition + 1) / (double) expectedValues.size());
 									}
 
 									assertFalse(result.next());
@@ -174,12 +164,6 @@ class JdbcContextFactoryTest {
 				}
 			}
 		}
-	}
-
-	private void assertMetaFieldEquals(ResultSet result, BaseContext context, MetaField metaField, Object value) {
-		context.getFunctionMetaFieldPos(metaField, false).ifPresent(SqlUtils.consumer(pos ->
-			assertEquals(value, result.getObject(pos + 1))
-		));
 	}
 
 	private Object[] valuesRow(Object... values) {
@@ -246,21 +230,30 @@ class JdbcContextFactoryTest {
 	void testPartition() throws Exception {
 		final String sql = "select count(a), progressive_partition() from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
+		testSingleAggregation(sql, Arrays.asList(
+				valuesPartition(valuesRow(4.0, 0)),
+				valuesPartition(valuesRow(5.0, 1))
+		));
 	}
 
 	@Test
 	void testProgress() throws Exception {
 		final String sql = "select avg(a), progressive_progress() from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(2.0, 5.0));
+		testSingleAggregation(sql, Arrays.asList(
+				valuesPartition(valuesRow(2.0, 0.5)),
+				valuesPartition(valuesRow(5.0, 1.0))
+		));
 	}
 
 	@Test
 	void testOrder() throws Exception {
 		final String sql = "select progressive_partition(), progressive_progress(), count(a) from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
+		testSingleAggregation(sql, Arrays.asList(
+				valuesPartition(valuesRow(0, 0.5, 4.0)),
+				valuesPartition(valuesRow(1, 1.0, 5.0))
+		));
 	}
 
 	@Test
