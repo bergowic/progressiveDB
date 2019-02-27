@@ -3,7 +3,6 @@ package de.tuda.progressive.db.statement.context.impl;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SqliteDriver;
 import de.tuda.progressive.db.sql.parser.SqlParserImpl;
-import de.tuda.progressive.db.statement.context.BaseContext;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.avatica.util.Casing;
@@ -84,7 +83,7 @@ class JdbcContextFactoryTest {
 		assertNotNull(context.getSelectSource());
 	}
 
-	private void testSingleAggregation(String sql, List<List<Object[]>> expectedValues) throws Exception {
+	private void testAggregation(String sql, List<List<Object[]>> expectedValues) throws Exception {
 		final SqlSelect select = (SqlSelect) SqlParser.create(sql, config).parseQuery();
 		final JdbcContext context = contextFactory.create(sourceConnection, select);
 
@@ -188,49 +187,49 @@ class JdbcContextFactoryTest {
 	void testAvg() throws Exception {
 		final String sql = "select avg(a) from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(2.0, 5.0));
+		testAggregation(sql, singleValueRowsPartitions(2.0, 5.0));
 	}
 
 	@Test
 	void testCount() throws Exception {
 		final String sql = "select count(a) from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
+		testAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
 	}
 
 	@Test
 	void testSum() throws Exception {
 		final String sql = "select sum(a) from t";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(8.0, 25.0));
+		testAggregation(sql, singleValueRowsPartitions(8.0, 25.0));
 	}
 
 	@Test
 	void testAvgWhere() throws Exception {
 		final String sql = "select avg(a) from t where c = 'a'";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(1.0, 3.0));
+		testAggregation(sql, singleValueRowsPartitions(1.0, 3.0));
 	}
 
 	@Test
 	void testCountWhere() throws Exception {
 		final String sql = "select count(a) from t where c = 'a'";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
+		testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
 	}
 
 	@Test
 	void testSumWhere() throws Exception {
 		final String sql = "select sum(a) from t where c = 'a'";
 
-		testSingleAggregation(sql, singleValueRowsPartitions(2.0, 6.0));
+		testAggregation(sql, singleValueRowsPartitions(2.0, 6.0));
 	}
 
 	@Test
 	void testPartition() throws Exception {
 		final String sql = "select count(a), progressive_partition() from t";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(valuesRow(4.0, 0)),
 				valuesPartition(valuesRow(5.0, 1))
 		));
@@ -240,7 +239,7 @@ class JdbcContextFactoryTest {
 	void testProgress() throws Exception {
 		final String sql = "select avg(a), progressive_progress() from t";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(valuesRow(2.0, 0.5)),
 				valuesPartition(valuesRow(5.0, 1.0))
 		));
@@ -250,7 +249,7 @@ class JdbcContextFactoryTest {
 	void testOrder() throws Exception {
 		final String sql = "select progressive_partition(), progressive_progress(), count(a) from t";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(valuesRow(0, 0.5, 4.0)),
 				valuesPartition(valuesRow(1, 1.0, 5.0))
 		));
@@ -260,7 +259,7 @@ class JdbcContextFactoryTest {
 	void testGroupByAvg() throws Exception {
 		final String sql = "select avg(a), c from t group by c";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(
 						valuesRow(1.0, "a"),
 						valuesRow(3.0, "b")
@@ -277,7 +276,7 @@ class JdbcContextFactoryTest {
 	void testGroupByCount() throws Exception {
 		final String sql = "select count(a), c from t group by c";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(
 						valuesRow(2.0, "a"),
 						valuesRow(2.0, "b")
@@ -294,7 +293,7 @@ class JdbcContextFactoryTest {
 	void testGroupBySum() throws Exception {
 		final String sql = "select sum(a), c from t group by c";
 
-		testSingleAggregation(sql, Arrays.asList(
+		testAggregation(sql, Arrays.asList(
 				valuesPartition(
 						valuesRow(2.0, "a"),
 						valuesRow(6.0, "b")
@@ -306,14 +305,10 @@ class JdbcContextFactoryTest {
 				)
 		));
 	}
-
-/*	@Test
+	@Test
 	void testColumnAlias() throws Exception {
-		final String sql = String.format("select sum(a) a from %s where c = 'a'", TABLE_NAME);
-		final SqlSelect select = (SqlSelect) SqlParser.create(sql).parseQuery();
-		final StatementContext context = de.tuda.progressive.db.statement.ContextFactory.instance.create(sourceConnection, driver, select, PARTITION, CACHE_TABLE_NAME);
+		final String sql = "select count(a) a from t where c = 'a'";
 
-		assertContextNotNull(context);
+		testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
 	}
-	*/
 }
