@@ -1,138 +1,183 @@
 package de.tuda.progressive.db.sql.parser;
 
 import org.apache.calcite.avatica.util.Casing;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
+import org.apache.commons.lang3.tuple.Triple;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class SqlCreateProgressiveViewTest {
 
-	private SqlParser.ConfigBuilder configBuilder;
+  private SqlParser.ConfigBuilder configBuilder;
 
-	@BeforeEach
-	void init() {
-		configBuilder = SqlParser.configBuilder()
-				.setUnquotedCasing(Casing.UNCHANGED)
-				.setParserFactory(SqlParserImpl.FACTORY);
-	}
+  @BeforeEach
+  void init() {
+    configBuilder =
+        SqlParser.configBuilder()
+            .setUnquotedCasing(Casing.UNCHANGED)
+            .setParserFactory(SqlParserImpl.FACTORY);
+  }
 
-	void testSimple(boolean replace) throws Exception {
-		final String name = "a";
-		final String table = "b";
+  void testSimple(boolean replace) throws Exception {
+    final String name = "a";
+    final String table = "b";
 
-		SqlParser parser = SqlParser.create(String.format(
-				"create %s progressive view %s as select * from %s", replace ? "or replace" : "", name, table
-		), configBuilder.build());
-		SqlNode node = parser.parseStmt();
+    SqlParser parser =
+        SqlParser.create(
+            String.format(
+                "create %s progressive view %s as select * from %s",
+                replace ? "or replace" : "", name, table),
+            configBuilder.build());
+    SqlNode node = parser.parseStmt();
 
-		assertEquals(SqlCreateProgressiveView.class, node.getClass());
+    assertEquals(SqlCreateProgressiveView.class, node.getClass());
 
-		SqlCreateProgressiveView createProgressiveView = (SqlCreateProgressiveView) node;
+    SqlCreateProgressiveView createProgressiveView = (SqlCreateProgressiveView) node;
 
-		assertEquals(name, createProgressiveView.getName().getSimple());
-		assertEquals(replace, createProgressiveView.getReplace());
-		assertEquals(SqlSelect.class, createProgressiveView.getQuery().getClass());
+    assertEquals(name, createProgressiveView.getName().getSimple());
+    assertEquals(replace, createProgressiveView.getReplace());
+    assertEquals(SqlSelect.class, createProgressiveView.getQuery().getClass());
 
-		SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
+    SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
 
-		assertEquals(SqlIdentifier.class, select.getFrom().getClass());
+    assertEquals(SqlIdentifier.class, select.getFrom().getClass());
 
-		SqlIdentifier from = (SqlIdentifier) select.getFrom();
+    SqlIdentifier from = (SqlIdentifier) select.getFrom();
 
-		assertEquals(table, from.getSimple());
-	}
+    assertEquals(table, from.getSimple());
+  }
 
-	@Test
-	void simpleCreate() throws Exception {
-		testSimple(false);
-	}
+  @Test
+  void simpleCreate() throws Exception {
+    testSimple(false);
+  }
 
-	@Test
-	void simpleCreateOrReplace() throws Exception {
-		testSimple(true);
-	}
+  @Test
+  void simpleCreateOrReplace() throws Exception {
+    testSimple(true);
+  }
 
-	private void testFutureGroupBy(Pair<String, Boolean>... columns) throws Exception {
-		final String groupBy = String.join(", ", Arrays.stream(columns).map(p -> {
-			String result = p.getLeft();
-			if (p.getRight()) {
-				result += " future";
-			}
-			return result;
-		}).collect(Collectors.toList()));
+  private String buildGroup(Triple<String, Boolean, String> column) {
+    String result = column.getLeft();
+    if (column.getMiddle()) {
+      result += " future";
+    }
+    return result;
+  }
 
-		final String name = "a";
-		final String table = "b";
+  private String buildSelect(Triple<String, Boolean, String> column) {
+    String result = buildGroup(column);
+    final String alias = column.getRight();
+    if (alias != null) {
+      result += " as " + alias;
+    }
+    return result;
+  }
 
-		SqlParser parser = SqlParser.create(
-				String.format("create progressive view %s as select * from %s group by %s", name, table, groupBy),
-				configBuilder.build()
-		);
-		SqlNode node = parser.parseStmt();
+  private void testFutureGroupBy(Triple<String, Boolean, String>... columns) throws Exception {
+    final String name = "a";
+    final String table = "b";
+    final List<String> selects =
+        Arrays.stream(columns).map(this::buildSelect).collect(Collectors.toList());
+    final List<String> groupBy =
+        Arrays.stream(columns).map(this::buildGroup).collect(Collectors.toList());
 
-		assertEquals(SqlCreateProgressiveView.class, node.getClass());
+    final String sql =
+        String.format(
+            "create progressive view %s as select %s from %s group by %s",
+            name, "x, " + String.join(", ", selects), table, String.join(", ", groupBy));
 
-		SqlCreateProgressiveView createProgressiveView = (SqlCreateProgressiveView) node;
+    SqlParser parser = SqlParser.create(sql, configBuilder.build());
+    SqlNode node = parser.parseStmt();
 
-		assertEquals(name, createProgressiveView.getName().getSimple());
-		assertEquals(SqlSelect.class, createProgressiveView.getQuery().getClass());
+    assertEquals(SqlCreateProgressiveView.class, node.getClass());
 
-		SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
-		SqlNodeList groupByList = select.getGroup();
+    SqlCreateProgressiveView createProgressiveView = (SqlCreateProgressiveView) node;
 
-		assertEquals(columns.length, groupByList.size());
-		for (int i = 0; i < columns.length; i++) {
-			if (columns[i].getRight()) {
-				assertEquals(SqlFutureIdentifier.class, groupByList.get(i).getClass());
-			} else {
-				assertEquals(SqlIdentifier.class, groupByList.get(i).getClass());
-			}
-			assertEquals(columns[i].getLeft(), ((SqlIdentifier) groupByList.get(i)).getSimple());
-		}
-	}
+    assertEquals(name, createProgressiveView.getName().getSimple());
+    assertEquals(SqlSelect.class, createProgressiveView.getQuery().getClass());
 
-	@Test
-	void groupBy() throws Exception {
-		testFutureGroupBy(new ImmutablePair<>("a", false));
-	}
+    SqlSelect select = (SqlSelect) createProgressiveView.getQuery();
+    SqlNodeList selectList = select.getSelectList();
+    SqlNodeList groupByList = select.getGroup();
 
-	@Test
-	void groupByFuture() throws Exception {
-		testFutureGroupBy(new ImmutablePair<>("a", true));
-	}
+    assertEquals(columns.length, groupByList.size());
+    for (int i = 0; i < columns.length; i++) {
+      SqlIdentifier groupIdentifier;
 
-	@Test
-	void groupByMultiple() throws Exception {
-		testFutureGroupBy(
-				new ImmutablePair<>("a", false),
-				new ImmutablePair<>("b", false)
-		);
-	}
+      if (columns[i].getMiddle()) {
+        final String alias = columns[i].getRight();
+        if (alias != null) {
+          assertAlias(columns[i], selectList.get(i + 1));
+        }
 
-	@Test
-	void groupByMultipleMixed() throws Exception {
-		testFutureGroupBy(
-				new ImmutablePair<>("a", false),
-				new ImmutablePair<>("b", true)
-		);
-	}
+        assertEquals(SqlFutureNode.class, groupByList.get(i).getClass());
+        groupIdentifier = (SqlIdentifier) ((SqlFutureNode) groupByList.get(i)).getNode();
+      } else {
+        assertEquals(SqlIdentifier.class, groupByList.get(i).getClass());
+        groupIdentifier = (SqlIdentifier) groupByList.get(i);
+      }
 
-	@Test
-	void groupByMultipleFuture() throws Exception {
-		testFutureGroupBy(
-				new ImmutablePair<>("a", true),
-				new ImmutablePair<>("b", true)
-		);
-	}
+      assertEquals(columns[i].getLeft(), groupIdentifier.getSimple());
+    }
+  }
+
+  private void assertAlias(Triple<String, Boolean, String> column, SqlNode alias) {
+    assertEquals(SqlBasicCall.class, alias.getClass());
+
+    final SqlBasicCall selectCall = (SqlBasicCall) alias;
+    assertEquals(SqlAsOperator.class, selectCall.getOperator().getClass());
+
+    SqlNode[] operands = selectCall.getOperands();
+
+    assertEquals(SqlFutureNode.class, operands[0].getClass());
+    final SqlNode node = ((SqlFutureNode) operands[0]).getNode();
+
+    assertEquals(SqlIdentifier.class, node.getClass());
+    assertEquals(column.getLeft(), ((SqlIdentifier) node).getSimple());
+
+    assertEquals(SqlIdentifier.class, operands[1].getClass());
+    assertEquals(column.getRight(), ((SqlIdentifier) operands[1]).getSimple());
+  }
+
+  @Test
+  void groupBy() throws Exception {
+    testFutureGroupBy(new ImmutableTriple<>("a", false, null));
+  }
+
+  @Test
+  void groupByFuture() throws Exception {
+    testFutureGroupBy(new ImmutableTriple<>("a", true, null));
+  }
+
+  @Test
+  void groupByMultiple() throws Exception {
+    testFutureGroupBy(
+        new ImmutableTriple<>("a", false, null), new ImmutableTriple<>("b", false, null));
+  }
+
+  @Test
+  void groupByMultipleMixed() throws Exception {
+    testFutureGroupBy(
+        new ImmutableTriple<>("a", false, null), new ImmutableTriple<>("b", true, null));
+  }
+
+  @Test
+  void groupByMultipleFuture() throws Exception {
+    testFutureGroupBy(
+        new ImmutableTriple<>("a", true, null), new ImmutableTriple<>("b", true, null));
+  }
+
+  @Test
+  void groupByFutureAlias() throws Exception {
+    testFutureGroupBy(new ImmutableTriple<>("a", true, "foo"));
+  }
 }

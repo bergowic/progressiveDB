@@ -181,7 +181,7 @@ SqlSelect SqlFutureSelect() :
     {
         keywordList = new SqlNodeList(keywords, s.addAll(keywords).pos());
     }
-    selectList = SelectList()
+    selectList = SelectFutureList()
     (
         <FROM> fromClause = FromClause()
         where = WhereOpt()
@@ -201,6 +201,48 @@ SqlSelect SqlFutureSelect() :
         return new SqlSelect(s.end(this), keywordList,
             new SqlNodeList(selectList, Span.of(selectList).pos()),
             fromClause, where, futureGroupBy, having, windowDecls, null, null, null);
+    }
+}
+
+List<SqlNode> SelectFutureList() :
+{
+    final List<SqlNode> list = new ArrayList<SqlNode>();
+    SqlNode item;
+}
+{
+    item = SelectFutureItem() {
+        list.add(item);
+    }
+    (
+        <COMMA> item = SelectFutureItem() {
+            list.add(item);
+        }
+    )*
+    {
+        return list;
+    }
+}
+
+SqlNode SelectFutureItem() :
+{
+    SqlNode e;
+    SqlIdentifier id;
+}
+{
+    e = SelectExpression()
+    [
+        <FUTURE> {
+            e = new SqlFutureNode(e, getPos());
+        }
+    ]
+    [
+        [ <AS> ]
+        id = SimpleIdentifier() {
+            e = SqlStdOperatorTable.AS.createCall(span().end(e), e, id);
+        }
+    ]
+    {
+        return e;
     }
 }
 
@@ -246,21 +288,11 @@ SqlNode FutureGroupingElement() :
     <LPAREN> <RPAREN> {
         return new SqlNodeList(getPos());
     }
-|   e = FutureIdentifier() <FUTURE> {
-        return e;
+|   e = Expression(ExprContext.ACCEPT_SUB_QUERY) <FUTURE> {
+        return new SqlFutureNode(e, getPos());
     }
 |   e = Expression(ExprContext.ACCEPT_SUB_QUERY) {
         return e;
-    }
-}
-
-SqlIdentifier FutureIdentifier() :
-{
-    final String p;
-}
-{
-    p = Identifier() {
-        return new SqlFutureIdentifier(p, getPos());
     }
 }
 
