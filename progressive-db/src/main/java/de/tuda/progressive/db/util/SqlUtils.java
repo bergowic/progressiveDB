@@ -42,15 +42,16 @@ public class SqlUtils {
 
 	public static SqlCreateTable createTable(
 			DbDriver driver,
-			String cacheTableName,
 			ResultSetMetaData metaData,
+			List<String> fieldNames,
+			String cacheTableName,
 			SqlNode... additionalColumns
 	) {
 		final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
 
 		try {
 			for (int i = 1; i <= metaData.getColumnCount(); i++) {
-				final String name = metaData.getColumnName(i);
+				final String name = fieldNames == null ? metaData.getColumnName(i) : fieldNames.get(i - 1);
 				final int columnType = metaData.getColumnType(i);
 				final int precision = metaData.getPrecision(i);
 				final int scale = metaData.getScale(i);
@@ -191,15 +192,8 @@ public class SqlUtils {
 		}));
 	}
 
-	public static SqlBasicCall createFunctionMetaField(int index, String name, SqlTypeName typeName) {
-		return new SqlBasicCall(
-				SqlStdOperatorTable.AS,
-				new SqlNode[]{
-						createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName),
-						new SqlIdentifier(name, SqlParserPos.ZERO)
-				},
-				SqlParserPos.ZERO
-		);
+	public static SqlBasicCall createFunctionMetaField(int index, SqlTypeName typeName) {
+		return createCast(new SqlDynamicParam(index, SqlParserPos.ZERO), typeName);
 	}
 
 	public static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {
@@ -251,6 +245,10 @@ public class SqlUtils {
 				new SqlNode[]{op1, op2},
 				SqlParserPos.ZERO
 		);
+	}
+
+	public static SqlIdentifier getIdentifier(String name) {
+		return new SqlIdentifier(name, SqlParserPos.ZERO);
 	}
 
 	public static SqlIdentifier getColumnIdentifier(ResultSetMetaData metaData, int pos) {

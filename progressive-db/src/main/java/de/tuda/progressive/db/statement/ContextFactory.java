@@ -58,7 +58,7 @@ public class ContextFactory {
 			final SqlSelect sourceSelect = transformSelect(driver, select, metaFields);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
-			final SqlCreateTable createCache = SqlUtils.createTable(driver, cacheTableName, metaData);
+			final SqlCreateTable createCache = SqlUtils.createTable(driver, metaData, null, cacheTableName);
 			final SqlInsert insertCache = insertCache(cacheTableName, metaData);
 			final SqlSelect selectCache = selectCache(cacheTableName, metaData, columnAliases, metaFields, sourceSelect.getGroup());
 
@@ -107,7 +107,7 @@ public class ContextFactory {
 			final int[] sourceSelectMapping = sortSelectList(driver, sourceSelect);
 			final PreparedStatement preparedStatement = prepareSourceSelect(connection, driver, sourceSelect);
 			final ResultSetMetaData metaData = preparedStatement.getMetaData();
-			final SqlCreateTable createCache = SqlUtils.createTable(driver, viewName, metaData);
+			final SqlCreateTable createCache = SqlUtils.createTable(driver, metaData, null, viewName);
 			final SqlInsert insertCache = insertCache(viewName, metaData);
 			final SqlSelect selectCache = selectCache(viewName, metaData, sourceSelectMapping, columnAliases, metaFields, removeFutures(select.getGroup()));
 
@@ -417,11 +417,11 @@ public class ContextFactory {
 					index++;
 					break;
 				case PARTITION:
-					newColumn = SqlUtils.createFunctionMetaField(index, "partition", SqlTypeName.INTEGER);
+					newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.INTEGER);
 					index++;
 					break;
 				case PROGRESS:
-					newColumn = SqlUtils.createFunctionMetaField(index, "progress", SqlTypeName.FLOAT);
+					newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.FLOAT);
 					index++;
 					break;
 				default:
