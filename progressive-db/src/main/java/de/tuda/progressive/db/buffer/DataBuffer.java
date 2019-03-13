@@ -6,9 +6,9 @@ import java.util.List;
 
 public interface DataBuffer extends AutoCloseable {
 
-	void add(ResultSet result);
+  void add(ResultSet result);
 
-	List<Object[]> get(int partition, double progress);
+  List<Object[]> get(int partition, double progress);
 
-	ResultSetMetaData getMetaData();
+  ResultSetMetaData getMetaData();
 }

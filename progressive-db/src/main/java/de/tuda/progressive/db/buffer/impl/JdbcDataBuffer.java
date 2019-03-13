@@ -4,141 +4,146 @@ import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.statement.ResultSetMetaDataWrapper;
 import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.context.impl.JdbcContext;
+import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-class JdbcDataBuffer implements DataBuffer {
+public class JdbcDataBuffer implements DataBuffer {
 
-	protected final DbDriver driver;
+  private final DbDriver driver;
 
-	protected final Connection connection;
+  private final Connection connection;
 
-	private final JdbcContext context;
+  private final JdbcSelectContext context;
 
-	private final PreparedStatement insertBuffer;
+  private final PreparedStatement insertBuffer;
 
-	private final PreparedStatement updateBuffer;
+  private final PreparedStatement updateBuffer;
 
-	private final PreparedStatement selectBuffer;
+  private final PreparedStatement selectBuffer;
 
-	private final ResultSetMetaData metaData;
+  private final ResultSetMetaData metaData;
 
-	JdbcDataBuffer(DbDriver driver, Connection connection, JdbcContext context) {
-		this.driver = driver;
-		this.connection = connection;
-		this.context = context;
+  JdbcDataBuffer(DbDriver driver, Connection connection, JdbcSelectContext context) {
+    this.driver = driver;
+    this.connection = connection;
+    this.context = context;
 
-		createBuffer(context.getCreateBuffer());
-		this.insertBuffer = prepare(context.getInsertBuffer());
-		this.updateBuffer = prepare(context.getUpdateBuffer());
-		this.selectBuffer = prepare(context.getSelectBuffer());
-		this.metaData = getMetaData(selectBuffer);
-	}
+    createBuffer(context.getCreateBuffer());
 
-	private void createBuffer(SqlCreateTable create) {
-		final String sql = driver.toSql(create);
-		try (Statement statement = connection.createStatement()) {
-			statement.execute(sql);
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+    this.insertBuffer = prepare(context.getInsertBuffer());
+    this.updateBuffer = prepare(context.getUpdateBuffer());
+    this.selectBuffer = prepare(context.getSelectBuffer());
+    this.metaData = getMetaData(selectBuffer);
+  }
 
-	private PreparedStatement prepare(SqlCall call) {
-		if (call == null) {
-			return null;
-		}
+  private void createBuffer(SqlCreateTable create) {
+    final String sql = driver.toSql(create);
+    try (Statement statement = connection.createStatement()) {
+      statement.execute(sql);
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-		final String sql = driver.toSql(call);
-		try {
-			return connection.prepareStatement(sql);
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  private PreparedStatement prepare(SqlCall call) {
+    if (call == null) {
+      return null;
+    }
 
-	private ResultSetMetaData getMetaData(PreparedStatement statement) {
-		try {
-			return new ResultSetMetaDataWrapper(statement.getMetaData());
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+    final String sql = driver.toSql(call);
+    try {
+      return connection.prepareStatement(sql);
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-	@Override
-	public final void add(ResultSet result) {
-		try {
-			addInternal(result);
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  private ResultSetMetaData getMetaData(PreparedStatement statement) {
+    try {
+      return new ResultSetMetaDataWrapper(statement.getMetaData());
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-	private void addInternal(ResultSet result) throws SQLException {
-		final int internalCount = result.getMetaData().getColumnCount();
+  @Override
+  public final void add(ResultSet result) {
+    try {
+      addInternal(result);
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-		// TODO execute update if exists
+  private void addInternal(ResultSet result) throws SQLException {
+    final int internalCount = result.getMetaData().getColumnCount();
 
-		while (!result.isClosed() && result.next()) {
-			for (int i = 1; i <= internalCount; i++) {
-				insertBuffer.setObject(i, result.getObject(i));
-				insertBuffer.setObject(i + internalCount, result.getObject(i));
-			}
-			insertBuffer.executeUpdate();
-		}
-	}
+    // TODO execute update if exists
 
-	@Override
-	public final List<Object[]> get(int partition, double progress) {
-		SqlUtils.setScale(selectBuffer, context.getMetaFields(), progress);
-		SqlUtils.setMetaFields(selectBuffer, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
-			put(MetaField.PARTITION, partition);
-			put(MetaField.PROGRESS, progress);
-		}});
+    while (!result.isClosed() && result.next()) {
+      for (int i = 1; i <= internalCount; i++) {
+        insertBuffer.setObject(i, result.getObject(i));
+        insertBuffer.setObject(i + internalCount, result.getObject(i));
+      }
+      insertBuffer.executeUpdate();
+    }
+  }
 
-		final List<Object[]> results = new ArrayList<>();
+  @Override
+  public final List<Object[]> get(int partition, double progress) {
+    SqlUtils.setScale(selectBuffer, context.getMetaFields(), progress);
+    SqlUtils.setMetaFields(
+        selectBuffer,
+        context::getFunctionMetaFieldPos,
+        new HashMap<MetaField, Object>() {
+          {
+            put(MetaField.PARTITION, partition);
+            put(MetaField.PROGRESS, progress);
+          }
+        });
 
-		try (ResultSet resultSet = selectBuffer.executeQuery()) {
-			while (resultSet.next()) {
-				Object[] row = new Object[selectBuffer.getMetaData().getColumnCount()];
-				for (int i = 1; i <= row.length; i++) {
-					row[i - 1] = resultSet.getObject(i);
-				}
-				results.add(row);
-			}
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
+    final List<Object[]> results = new ArrayList<>();
 
-		return results;
-	}
+    try (ResultSet resultSet = selectBuffer.executeQuery()) {
+      while (resultSet.next()) {
+        Object[] row = new Object[selectBuffer.getMetaData().getColumnCount()];
+        for (int i = 1; i <= row.length; i++) {
+          row[i - 1] = resultSet.getObject(i);
+        }
+        results.add(row);
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
 
-	@Override
-	public void close() throws Exception {
-		SqlUtils.closeSafe(insertBuffer);
-		SqlUtils.closeSafe(updateBuffer);
-		SqlUtils.closeSafe(selectBuffer);
-	}
+    return results;
+  }
 
-	@Override
-	public ResultSetMetaData getMetaData() {
-		return metaData;
-	}
+  @Override
+  public void close() throws Exception {
+    SqlUtils.closeSafe(insertBuffer);
+    SqlUtils.closeSafe(updateBuffer);
+    SqlUtils.closeSafe(selectBuffer);
+  }
+
+  @Override
+  public ResultSetMetaData getMetaData() {
+    return metaData;
+  }
+
+  public Connection getConnection() {
+    return connection;
+  }
 }
