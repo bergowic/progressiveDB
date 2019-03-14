@@ -5,7 +5,7 @@ import org.apache.calcite.sql.SqlSelect;
 
 import java.util.List;
 
-public abstract class JdbcSourceContext extends BaseContext {
+public class JdbcSourceContext extends BaseContext {
 
   private final SqlSelect selectSource;
 
@@ -19,7 +19,8 @@ public abstract class JdbcSourceContext extends BaseContext {
     return selectSource;
   }
 
-  public abstract static class Builder<C extends JdbcSourceContext, B extends Builder<C, B>>
+  public abstract static class AbstractBuilder<
+          C extends JdbcSourceContext, B extends AbstractBuilder<C, B>>
       extends BaseContext.Builder<C, B> {
     private SqlSelect selectSource;
 
@@ -34,5 +35,12 @@ public abstract class JdbcSourceContext extends BaseContext {
     }
 
     protected abstract C build(List<MetaField> metaFields, SqlSelect selectSource);
+  }
+
+  public static class Builder extends AbstractBuilder<JdbcSourceContext, Builder> {
+    @Override
+    protected JdbcSourceContext build(List<MetaField> metaFields, SqlSelect selectSource) {
+      return new JdbcSourceContext(metaFields, selectSource);
+    }
   }
 }

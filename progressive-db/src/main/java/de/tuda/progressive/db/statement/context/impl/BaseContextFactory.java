@@ -76,6 +76,10 @@ public abstract class BaseContextFactory<
     return (SqlIdentifier) call.operand(1);
   }
 
+  protected final List<MetaField> getMetaFields(List<MetaField> metaFields, List<Integer> indices) {
+    return indices.stream().map(metaFields::get).collect(Collectors.toList());
+  }
+
   protected final List<MetaField> getMetaFields(SqlNodeList columns) {
     return get(columns, this::columnToMetaField);
   }
@@ -159,9 +163,9 @@ public abstract class BaseContextFactory<
     }
 
     final SqlIdentifier oldFrom = (SqlIdentifier) select.getFrom();
-    SqlIdentifier from =
-        new SqlIdentifier(sourceDriver.getPartitionTable(oldFrom.getSimple()), SqlParserPos.ZERO);
-    SqlBasicCall where = createWhere((SqlBasicCall) select.getWhere());
+    final SqlIdentifier from =
+        SqlUtils.getIdentifier(sourceDriver.getPartitionTable(oldFrom.getSimple()));
+    final SqlBasicCall where = createWhere((SqlBasicCall) select.getWhere());
 
     return new SqlSelect(
         SqlParserPos.ZERO,

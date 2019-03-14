@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class JdbcDataBuffer implements DataBuffer {
+public class JdbcDataBuffer implements DataBuffer<JdbcSelectContext> {
 
   private final DbDriver driver;
 
@@ -30,7 +30,7 @@ public class JdbcDataBuffer implements DataBuffer {
 
   private final ResultSetMetaData metaData;
 
-  JdbcDataBuffer(DbDriver driver, Connection connection, JdbcSelectContext context) {
+  public JdbcDataBuffer(DbDriver driver, Connection connection, JdbcSelectContext context) {
     this.driver = driver;
     this.connection = connection;
     this.context = context;
@@ -68,6 +68,10 @@ public class JdbcDataBuffer implements DataBuffer {
   }
 
   private ResultSetMetaData getMetaData(PreparedStatement statement) {
+    if (statement == null) {
+      return null;
+    }
+
     try {
       return new ResultSetMetaDataWrapper(statement.getMetaData());
     } catch (SQLException e) {
@@ -145,5 +149,10 @@ public class JdbcDataBuffer implements DataBuffer {
 
   public Connection getConnection() {
     return connection;
+  }
+
+  @Override
+  public JdbcSelectContext getContext() {
+    return context;
   }
 }

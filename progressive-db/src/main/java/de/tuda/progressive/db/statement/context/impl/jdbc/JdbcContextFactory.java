@@ -7,6 +7,7 @@ import de.tuda.progressive.db.sql.parser.SqlFutureNode;
 import de.tuda.progressive.db.sql.parser.SqlUpsert;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
+import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -14,6 +15,8 @@ import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -23,9 +26,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 public class JdbcContextFactory
-    extends BaseContextFactory<JdbcSelectContext, JdbcSelectContext, JdbcDataBuffer> {
+    extends BaseContextFactory<JdbcSelectContext, JdbcSourceContext, JdbcDataBuffer> {
 
   private final DbDriver bufferDriver;
 
@@ -69,8 +75,18 @@ public class JdbcContextFactory
   }
 
   @Override
-  public JdbcSelectContext create(JdbcDataBuffer dataBuffer, SqlSelect select) {
-    return null;
+  public JdbcSourceContext create(JdbcDataBuffer dataBuffer, SqlSelect select) {
+    final JdbcSelectContext context = dataBuffer.getContext();
+    final Pair<SqlSelect, List<Integer>> transformed = transformSelect(context, select);
+
+    final List<MetaField> metaFields =
+        getMetaFields(context.getMetaFields(), transformed.getRight());
+    final SqlSelect selectBuffer = transformed.getLeft();
+
+    return new JdbcSourceContext.Builder()
+        .metaFields(metaFields)
+        .selectSource(selectBuffer)
+        .build();
   }
 
   @Override
@@ -100,6 +116,106 @@ public class JdbcContextFactory
       // TODO
       throw new RuntimeException(e);
     }
+  }
+
+  private Pair<SqlSelect, List<Integer>> transformSelect(
+      JdbcBufferContext context, SqlSelect select) {
+    final SqlNodeList selectList = SqlNodeList.clone(select.getSelectList());
+    final List<Integer> indices =
+        substituteFields(context::getFieldIndex, context.getMetaFields(), selectList);
+    final SqlNodeList groups = getIndexColumns(context.getMetaFields(), indices);
+
+    return ImmutablePair.of(
+        new SqlSelect(
+            SqlParserPos.ZERO,
+            null,
+            selectList,
+            select.getFrom(),
+            select.getWhere(),
+            groups.size() > 0 ? groups : null,
+            select.getHaving(),
+            select.getWindowList(),
+            select.getOrderList(),
+            select.getOffset(),
+            select.getFetch()),
+        indices);
+  }
+
+  private List<Integer> substituteFields(
+      Function<String, Integer> fieldMapper, List<MetaField> metaFields, SqlNodeList selectList) {
+    final List<Integer> indices = new ArrayList<>();
+
+    for (int i = 0; i < selectList.size(); i++) {
+      final Pair<SqlNode, List<Integer>> substituted =
+          substituteFields(fieldMapper, metaFields, selectList.get(i), true);
+
+      selectList.set(i, substituted.getLeft());
+      indices.addAll(substituted.getRight());
+    }
+
+    return indices;
+  }
+
+  private Pair<SqlNode, List<Integer>> substituteFields(
+      Function<String, Integer> fieldMapper,
+      List<MetaField> metaFields,
+      SqlNode node,
+      boolean addAlias) {
+    final List<Integer> indices = new ArrayList<>();
+
+    if (node instanceof SqlIdentifier) {
+      final String fieldName = ((SqlIdentifier) node).getSimple();
+      final int index = fieldMapper.apply(fieldName);
+      if (index < 0) {
+        throw new IllegalArgumentException("field not found: " + node);
+      }
+
+      final MetaField metaField = metaFields.get(index);
+      switch (metaField) {
+        case AVG:
+          node =
+              SqlUtils.createAvgAggregation(
+                  SqlUtils.getIdentifier(getBufferFieldName(index, MetaField.SUM)),
+                  SqlUtils.getIdentifier(getBufferFieldName(index, MetaField.COUNT)));
+          break;
+        case COUNT:
+        case SUM:
+          node =
+              SqlUtils.createPercentAggregation(
+                  index, SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
+          break;
+        case FUTURE:
+        case NONE:
+          node = SqlUtils.getIdentifier(getBufferFieldName(index, metaField));
+          break;
+        case PROGRESS:
+        case PARTITION:
+          // do nothing
+          break;
+        default:
+          throw new IllegalArgumentException("metaField not handled: " + metaField);
+      }
+
+      if (addAlias) {
+        node = SqlUtils.getAlias(node, fieldName);
+      }
+
+      indices.add(index);
+    } else if (node instanceof SqlBasicCall) {
+      final SqlBasicCall call = (SqlBasicCall) node;
+
+      if (SqlStdOperatorTable.AS.equals(call.getOperator())) {
+        final Pair<SqlNode, List<Integer>> substituted =
+            substituteFields(fieldMapper, metaFields, call.operand(0), false);
+
+        call.setOperand(0, substituted.getLeft());
+        indices.addAll(substituted.getRight());
+      }
+
+      // TODO
+    }
+
+    return ImmutablePair.of(node, indices);
   }
 
   private List<String> getFieldNames(SqlNodeList selectList) {
@@ -133,21 +249,16 @@ public class JdbcContextFactory
 
     for (MetaField metaField : metaFields) {
       switch (metaField) {
-        case NONE:
-          fieldNames.add(getBufferFieldName(i++));
-          break;
         case AVG:
-          fieldNames.add(getBufferFieldName(i, "sum"));
-          fieldNames.add(getBufferFieldName(i++, "count"));
+          fieldNames.add(getBufferFieldName(i, MetaField.SUM));
+          fieldNames.add(getBufferFieldName(i++, MetaField.COUNT));
           break;
+        case NONE:
         case COUNT:
-          fieldNames.add(getBufferFieldName(i++, "count"));
-          break;
         case SUM:
-          fieldNames.add(getBufferFieldName(i++, "sum"));
-          break;
         case FUTURE:
-          fieldNames.add(getBufferFieldName(i++, "future"));
+          fieldNames.add(getBufferFieldName(i++, metaField));
+          break;
         case PARTITION:
         case PROGRESS:
           i++;
@@ -160,15 +271,11 @@ public class JdbcContextFactory
     return fieldNames;
   }
 
-  private String getBufferFieldName(int index) {
-    return getBufferFieldName(index, null);
-  }
-
-  private String getBufferFieldName(int index, String suffix) {
-    if (suffix == null) {
+  private String getBufferFieldName(int index, MetaField metaField) {
+    if (metaField == MetaField.NONE) {
       return String.format("f%d", index);
     } else {
-      return String.format("f%d_%s", index, suffix);
+      return String.format("f%d_%s", index, metaField.name());
     }
   }
 
@@ -210,7 +317,7 @@ public class JdbcContextFactory
     int i = 0;
     int index = 0;
     for (int j = 0; j < fieldNames.size(); j++) {
-      final SqlIdentifier alias = new SqlIdentifier(fieldNames.get(j), SqlParserPos.ZERO);
+      final String alias = fieldNames.get(j);
       final MetaField metaField = metaFields.get(j);
 
       SqlNode newColumn;
@@ -228,12 +335,6 @@ public class JdbcContextFactory
           i += 2;
           break;
         case COUNT:
-          newColumn =
-              SqlUtils.createPercentAggregation(
-                  index, SqlUtils.getIdentifier(bufferFieldNames.get(i)));
-          i++;
-          index++;
-          break;
         case SUM:
           newColumn =
               SqlUtils.createPercentAggregation(
@@ -253,9 +354,7 @@ public class JdbcContextFactory
           throw new IllegalArgumentException("metaField not handled: " + metaField);
       }
 
-      selectList.add(
-          new SqlBasicCall(
-              SqlStdOperatorTable.AS, new SqlNode[] {newColumn, alias}, SqlParserPos.ZERO));
+      selectList.add(SqlUtils.getAlias(newColumn, alias));
     }
 
     return new SqlSelect(
@@ -325,11 +424,7 @@ public class JdbcContextFactory
           throw new IllegalArgumentException("metaField not handled: " + metaField);
       }
 
-      selectList.add(
-          alias == null
-              ? newColumn
-              : new SqlBasicCall(
-                  SqlStdOperatorTable.AS, new SqlNode[] {newColumn, alias}, SqlParserPos.ZERO));
+      selectList.add(alias == null ? newColumn : SqlUtils.getAlias(newColumn, alias));
     }
 
     return new SqlSelect(
@@ -347,12 +442,18 @@ public class JdbcContextFactory
   }
 
   private SqlNodeList getIndexColumns(List<MetaField> metaFields) {
+    return getIndexColumns(
+        metaFields, IntStream.range(0, metaFields.size()).boxed().collect(Collectors.toList()));
+  }
+
+  private SqlNodeList getIndexColumns(List<MetaField> metaFields, List<Integer> indices) {
     final SqlNodeList indexColumns = new SqlNodeList(SqlParserPos.ZERO);
-    for (int i = 0; i < metaFields.size(); i++) {
-      switch (metaFields.get(i)) {
+    for (Integer index : indices) {
+      final MetaField metaField = metaFields.get(index);
+      switch (metaField) {
         case NONE:
         case FUTURE:
-          indexColumns.add(new SqlIdentifier(getBufferFieldName(i), SqlParserPos.ZERO));
+          indexColumns.add(SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
           break;
       }
     }

@@ -27,13 +27,22 @@ public class JdbcBufferContext extends JdbcSourceContext {
     return fieldNames;
   }
 
+  public int getFieldIndex(String fieldName) {
+    for (int i = 0; i < fieldNames.size(); i++) {
+      if (fieldName.equalsIgnoreCase(fieldNames.get(i))) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   public SqlSelect getSelectBuffer() {
     return selectBuffer;
   }
 
   protected abstract static class AbstractBuilder<
           C extends JdbcBufferContext, B extends AbstractBuilder<C, B>>
-      extends JdbcSourceContext.Builder<C, B> {
+      extends JdbcSourceContext.AbstractBuilder<C, B> {
 
     private List<String> fieldNames;
 
