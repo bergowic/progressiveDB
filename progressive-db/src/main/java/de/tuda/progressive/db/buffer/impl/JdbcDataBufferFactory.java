@@ -2,8 +2,10 @@ package de.tuda.progressive.db.buffer.impl;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.buffer.DataBufferFactory;
+import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
+import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
 
@@ -13,7 +15,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 
-public class JdbcDataBufferFactory implements DataBufferFactory<JdbcSelectContext> {
+public class JdbcDataBufferFactory
+    implements DataBufferFactory<JdbcSelectContext, JdbcSourceContext> {
 
   private final String url;
 
@@ -58,6 +61,13 @@ public class JdbcDataBufferFactory implements DataBufferFactory<JdbcSelectContex
 
       throw t;
     }
+  }
+
+  @Override
+  public SelectDataBuffer create(DataBuffer dataBuffer, JdbcSourceContext context) {
+    final Connection connection = ((JdbcSelectDataBuffer) dataBuffer).getConnection();
+    final DbDriver driver = getDriver(connection);
+    return new JdbcSelectDataBuffer(driver, connection, context, context.getSelectSource());
   }
 
   private DataBuffer create(DbDriver driver, Connection connection, JdbcSelectContext context) {

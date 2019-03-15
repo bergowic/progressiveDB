@@ -2,11 +2,14 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.buffer.DataBufferFactory;
+import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Partition;
-import de.tuda.progressive.db.statement.context.BaseContext;
-import de.tuda.progressive.db.statement.old.context.StatementContext;
+import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.statement.context.impl.BaseContext;
+import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
+import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
@@ -20,141 +23,110 @@ import java.util.Map;
 
 public class SimpleStatementFactory implements ProgressiveStatementFactory {
 
-	private static final Logger log = LoggerFactory.getLogger(SimpleStatementFactory.class);
+  private static final Logger log = LoggerFactory.getLogger(SimpleStatementFactory.class);
 
-	private final Map<String, StatementContext> viewContexts = new HashMap<>();
+  private final Map<String, ProgressiveViewStatement> viewStatements = new HashMap<>();
 
-	private final Map<String, ProgressiveViewStatement> viewStatements = new HashMap<>();
+  private final DbDriver driver;
 
-	private final DbDriver driver;
+  private final MetaData metaData;
 
-	private final MetaData metaData;
+  private final BaseContextFactory contextFactory;
 
-	private final de.tuda.progressive.db.statement.context.ContextFactory contextFactory;
+  private final DataBufferFactory dataBufferFactory;
 
-	private final DataBufferFactory dataBufferFactory;
+  public SimpleStatementFactory(
+      DbDriver driver,
+      MetaData metaData,
+      BaseContextFactory contextFactory,
+      DataBufferFactory dataBufferFactory) {
+    this.driver = driver;
+    this.metaData = metaData;
+    this.contextFactory = contextFactory;
+    this.dataBufferFactory = dataBufferFactory;
+  }
 
-	public SimpleStatementFactory(
-			DbDriver driver,
-			MetaData metaData,
-			de.tuda.progressive.db.statement.context.ContextFactory contextFactory,
-			DataBufferFactory dataBufferFactory
-	) {
-		this.driver = driver;
-		this.metaData = metaData;
-		this.contextFactory = contextFactory;
-		this.dataBufferFactory = dataBufferFactory;
-	}
+  @Override
+  public ProgressiveStatement prepare(Connection connection, SqlSelect select) {
+    log.info("prepare select: {}", select);
+    assertValid(select);
 
-	@Override
-	public ProgressiveStatement prepare(Connection connection, SqlSelect select) {
-		log.info("prepare select: {}", select);
-		assertValid(select);
+    final ProgressiveViewStatement viewStatement = getProgressiveView(select);
 
-		final List<Partition> partitions = getPartitions(select);
-		final BaseContext context = contextFactory.create(connection, select);
-		final DataBuffer dataBuffer = dataBufferFactory.create(context);
+    if (viewStatement == null) {
+      log.info("no view found");
 
-		return new ProgressiveSelectStatement(driver, connection, context, dataBuffer, partitions);
-	}
+      final List<Partition> partitions = getPartitions(select);
+      final JdbcSourceContext context = contextFactory.create(connection, select);
+      final DataBuffer dataBuffer = dataBufferFactory.create(context);
 
-	/*	@Override
-		public ProgressiveStatement prepare(SqlSelect select) {
-			log.info("prepare select: {}", select);
-			assertValid(select);
+      return new ProgressiveSelectStatement(driver, connection, context, dataBuffer, partitions);
+    } else {
+      log.info("view found");
 
-			final ProgressiveViewStatement viewStatement = getProgressiveView(select);
+      final BaseContext context = contextFactory.create(viewStatement.getDataBuffer(), select);
+      final SelectDataBuffer dataBuffer =
+          dataBufferFactory.create(viewStatement.getDataBuffer(), context);
+      return new ProgressiveViewSelectStatement(viewStatement, dataBuffer);
+    }
+  }
 
-			if (viewStatement == null) {
-				log.info("no view found");
-				final List<Partition> partitions = getPartitions(select);
-				final StatementContext context = ContextFactory.instance.create(connection, driver, select, partitions.get(0));
+  @Override
+  public ProgressiveStatement prepare(
+      Connection connection, SqlCreateProgressiveView createProgressiveView) {
+    log.info("prepare progressive view: {}", createProgressiveView);
 
-				return new ProgressiveSelectStatement(driver, connection, tmpConnection, context, partitions);
-			} else {
-				log.info("view found");
-				final SimpleStatementContext context = ContextFactory.instance.create(viewStatement.getContext(), select);
-				return new ProgressiveViewSelectStatement(tmpConnection, driver, viewStatement, context);
-			}
-		}
-	*/
-/*
-	private ProgressiveViewStatement getProgressiveView(SqlSelect select) {
-		final SqlIdentifier from = (SqlIdentifier) select.getFrom();
-		return viewStatements.get(from.getSimple().toUpperCase());
-	}
-*/
-/*
-	@Override
-	public ProgressiveStatement prepare(SqlCreateProgressiveView createProgressiveView) {
-		log.info("prepare progressive view: {}", createProgressiveView);
+    final SqlNode query = createProgressiveView.getQuery();
+    if (!(query instanceof SqlSelect)) {
+      throw new IllegalArgumentException("query must be a select");
+    }
 
-		final SqlNode query = createProgressiveView.getQuery();
-		if (!(query instanceof SqlSelect)) {
-			throw new IllegalArgumentException("query must be a select");
-		}
+    final SqlSelect select = (SqlSelect) query;
+    assertValid(select);
 
-		final SqlSelect select = (SqlSelect) query;
-		assertValid(select);
+    final SqlIdentifier view = createProgressiveView.getName();
+    final String viewName = view.getSimple().toUpperCase();
+    final JdbcSourceContext context = contextFactory.create(connection, createProgressiveView);
 
-		final SqlIdentifier view = createProgressiveView.getName();
-		final String viewName = view.getSimple().toUpperCase();
-		final StatementContext context = ContextFactory.instance.create(connection, driver, createProgressiveView);
+    if (viewStatements.containsKey(viewName)) {
+      throw new IllegalStateException("view already exists");
+    } else {
+      log.info("create new view");
+      return addViewStatement(connection, context, select, viewName);
+    }
+  }
 
-		if (viewContexts.containsKey(viewName)) {
-			final StatementContext oldContext = viewContexts.get(viewName);
-			if (driver.toSql(oldContext.getSelectSource()).equals(driver.toSql(context.getSelectSource()))) {
-				log.info("same data source, update select");
-				final ProgressiveViewStatement statement = viewStatements.get(viewName);
+  private ProgressiveViewStatement getProgressiveView(SqlSelect select) {
+    final SqlIdentifier from = (SqlIdentifier) select.getFrom();
+    return viewStatements.get(from.getSimple().toUpperCase());
+  }
 
-				statement.setSimpleContext(context);
+  private List<Partition> getPartitions(SqlSelect select) {
+    final SqlIdentifier from = (SqlIdentifier) select.getFrom();
+    return metaData.getPartitions(from.getSimple());
+  }
 
-				return statement;
-			} else {
-				log.info("replace old view");
-				final ProgressiveStatement oldStatement = viewStatements.get(viewName);
+  private ProgressiveViewStatement addViewStatement(
+      Connection connection, JdbcSourceContext context, SqlSelect select, String viewName) {
+    final DataBuffer dataBuffer = dataBufferFactory.create(context);
+    final List<Partition> partitions = getPartitions(select);
+    final ProgressiveViewStatement statement =
+        new ProgressiveViewStatement(driver, connection, context, dataBuffer, partitions);
 
-				oldStatement.close();
+    viewStatements.put(viewName, statement);
 
-				return addViewStatement(select, viewName, context);
-			}
-		} else {
-			log.info("create new view");
-			return addViewStatement(select, viewName, context);
-		}
-	}
-*/
-	private List<Partition> getPartitions(SqlSelect select) {
-		final SqlIdentifier from = (SqlIdentifier) select.getFrom();
-		return metaData.getPartitions(from.getSimple());
-	}
+    return statement;
+  }
 
-	/*
-		private ProgressiveViewStatement addViewStatement(SqlSelect select, String viewName, StatementContext context) {
-			final List<Partition> partitions = getPartitions(select);
-			final ProgressiveViewStatement statement = new ProgressiveViewStatement(
-					driver,
-					connection,
-					tmpConnection,
-					context,
-					partitions
-			);
+  private void assertValid(SqlSelect select) {
+    SqlNode fromNode = select.getFrom();
+    if (!(fromNode instanceof SqlIdentifier)) {
+      throw new IllegalArgumentException("from is not of type SqlIdentifier");
+    }
 
-			viewContexts.put(viewName, context);
-			viewStatements.put(viewName, statement);
-
-			return statement;
-		}
-	*/
-	private void assertValid(SqlSelect select) {
-		SqlNode fromNode = select.getFrom();
-		if (!(fromNode instanceof SqlIdentifier)) {
-			throw new IllegalArgumentException("from is not of type SqlIdentifier");
-		}
-
-		SqlIdentifier fromId = (SqlIdentifier) fromNode;
-		if (fromId.names.size() != 1) {
-			throw new IllegalArgumentException("from does not contain exact 1 source");
-		}
-	}
+    SqlIdentifier fromId = (SqlIdentifier) fromNode;
+    if (fromId.names.size() != 1) {
+      throw new IllegalArgumentException("from does not contain exact 1 source");
+    }
+  }
 }

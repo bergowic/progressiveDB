@@ -1,117 +1,79 @@
 package de.tuda.progressive.db.statement;
 
-import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.model.Partition;
-import de.tuda.progressive.db.statement.context.MetaField;
-import de.tuda.progressive.db.statement.old.context.SimpleStatementContext;
-import de.tuda.progressive.db.util.SqlUtils;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 
-public class ProgressiveViewSelectStatement implements ProgressiveStatement, ProgressiveListener {
+public class ProgressiveViewSelectStatement
+    implements ProgressiveStatement<SelectDataBuffer>, ProgressiveListener {
 
-	private final ProgressiveViewStatement viewStatement;
+  private final ProgressiveViewStatement view;
 
-	private final SimpleStatementContext context;
+  private final SelectDataBuffer dataBuffer;
 
-	private final PreparedStatement selectStatement;
+  private List<Object[]> results = new ArrayList<>();
 
-	private final ResultSetMetaData metaData;
+  public ProgressiveViewSelectStatement(
+      ProgressiveViewStatement view, SelectDataBuffer dataBuffer) {
+    this.view = view;
+    this.dataBuffer = dataBuffer;
+  }
 
-	private List<Object[]> results = new ArrayList<>();
+  @Override
+  public synchronized void handle(Partition partition) {
+    List<Object[]> rows = dataBuffer.get(view.getReadPartitions(), view.getProgress());
+    results.addAll(rows);
 
-	public ProgressiveViewSelectStatement(
-			Connection tmpConnection,
-			DbDriver driver,
-			ProgressiveViewStatement viewStatement,
-			SimpleStatementContext context
-	) {
-		this.viewStatement = viewStatement;
-		this.context = context;
+    notify();
+  }
 
-		try {
-			this.selectStatement = tmpConnection.prepareStatement(driver.toSql(context.getSelectCache()));
-			this.metaData = new ResultSetMetaDataWrapper(selectStatement.getMetaData());
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  @Override
+  public synchronized ResultSet getResultSet() {
+    if (results.isEmpty() && !isDone()) {
+      try {
+        wait();
+      } catch (InterruptedException e) {
+        // do nothing
+      }
+    }
 
-	@Override
-	public synchronized void handle(Partition partition) {
-		try {
-			SqlUtils.setScale(selectStatement, context.getMetaFields(), getProgress());
-			SqlUtils.setMetaFields(selectStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
-				put(MetaField.PARTITION, getReadPartitions() - 1);
-				put(MetaField.PROGRESS, getProgress());
-			}});
+    ResultSet resultSet = new ProgressiveResultSet(getMetaData(), new LinkedList<>(results));
+    results.clear();
+    return resultSet;
+  }
 
-			ResultSet resultSet = selectStatement.executeQuery();
-			while (resultSet.next()) {
-				Object[] row = new Object[getMetaData().getColumnCount()];
-				for (int i = 1; i <= row.length; i++) {
-					row[i - 1] = resultSet.getObject(i);
-				}
-				results.add(row);
-			}
-			notify();
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  @Override
+  public ResultSetMetaData getMetaData() {
+    return dataBuffer.getMetaData();
+  }
 
-	@Override
-	public synchronized ResultSet getResultSet() {
-		if (results.isEmpty() && !isDone()) {
-			try {
-				wait();
-			} catch (InterruptedException e) {
-				// do nothing
-			}
-		}
+  @Override
+  public SelectDataBuffer getDataBuffer() {
+    return dataBuffer;
+  }
 
-		ResultSet resultSet = new ProgressiveResultSet(getMetaData(), new LinkedList<>(results));
-		results.clear();
-		return resultSet;
-	}
+  @Override
+  public boolean isDone() {
+    return false;
+  }
 
-	@Override
-	public ResultSetMetaData getMetaData() {
-		return metaData;
-	}
+  @Override
+  public void run() {
+    view.addListener(this);
+  }
 
-	@Override
-	public int getReadPartitions() {
-		return viewStatement.getReadPartitions();
-	}
+  @Override
+  public void close() {
+    view.removeListener(this);
+  }
 
-	@Override
-	public double getProgress() {
-		return viewStatement.getProgress();
-	}
-
-	@Override
-	public boolean isDone() {
-		return false;
-	}
-
-	@Override
-	public void run() {
-		viewStatement.addListener(this);
-	}
-
-	@Override
-	public void close() {
-		viewStatement.removeListener(this);
-	}
+  @Override
+  public boolean closeWithStatement() {
+    return true;
+  }
 }

@@ -6,8 +6,8 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.meta.jdbc.JdbcMetaData;
-import de.tuda.progressive.db.statement.context.ContextFactory;
-import de.tuda.progressive.db.statement.context.impl.JdbcContextFactory;
+import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
+import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcContextFactory;
 import org.apache.calcite.avatica.Meta;
 import org.apache.calcite.avatica.remote.Driver;
 import org.apache.calcite.avatica.remote.Service;
@@ -178,7 +178,7 @@ public class ProgressiveDbServer {
 
 			final DbDriver sourceDriver = DbDriverFactory.create(sourceUrl);
 			final DbDriver bufferDriver = DbDriverFactory.create(tmpUrl);
-			final ContextFactory contextFactory = createContextFactory(sourceDriver, bufferDriver);
+			final BaseContextFactory contextFactory = createContextFactory(sourceDriver, bufferDriver);
 			final DataBufferFactory dataBufferFactory = createDataBufferFactory(tmpUrl, tmpProperties);
 			final MetaData metaData = new JdbcMetaData(metaUrl, metaProperties);
 
@@ -213,7 +213,7 @@ public class ProgressiveDbServer {
 		}
 	}
 
-	private ContextFactory createContextFactory(DbDriver sourceDriver, DbDriver bufferDriver) {
+	private BaseContextFactory createContextFactory(DbDriver sourceDriver, DbDriver bufferDriver) {
 		return new JdbcContextFactory(sourceDriver, bufferDriver);
 	}
 

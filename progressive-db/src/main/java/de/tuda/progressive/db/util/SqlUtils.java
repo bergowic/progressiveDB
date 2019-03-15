@@ -155,6 +155,7 @@ public class SqlUtils {
             statement.setDouble(pos++, progress);
             break;
           case NONE:
+          case FUTURE:
             // do nothing
             break;
           case AVG:

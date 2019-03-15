@@ -1,16 +1,9 @@
 package de.tuda.progressive.db.buffer;
 
+import de.tuda.progressive.db.statement.context.impl.BaseContext;
+
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.util.List;
 
-public interface DataBuffer<C> extends AutoCloseable {
-
+public interface DataBuffer<C extends BaseContext> extends SelectDataBuffer<C> {
   void add(ResultSet result);
-
-  List<Object[]> get(int partition, double progress);
-
-  ResultSetMetaData getMetaData();
-
-  C getContext();
 }

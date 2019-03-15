@@ -37,6 +37,7 @@ public class ProgressiveMeta extends JdbcMeta {
 	private static final String KEYWORD_PROGRESSIVE = "PROGRESSIVE";
 
 	private final ConcurrentMap<Integer, ProgressiveStatement> statements = new ConcurrentHashMap<>();
+	private final ConcurrentMap<Integer, ProgressiveStatement> durableStatements = new ConcurrentHashMap<>();
 
 	private final ProgressiveHandler progressiveHandler;
 
@@ -90,8 +91,8 @@ public class ProgressiveMeta extends JdbcMeta {
 						getStatementIdGenerator().getAndIncrement(),
 						signature(statement.getMetaData())
 				);
+				addStatement(handle.id, statement);
 
-				statements.putIfAbsent(handle.id, statement);
 				return handle;
 			} catch (SQLException e) {
 				throw new RuntimeException(e);
@@ -162,11 +163,19 @@ public class ProgressiveMeta extends JdbcMeta {
 		}
 	}
 
+	private void addStatement(int handleId, ProgressiveStatement statement) {
+		if (statement.closeWithStatement()) {
+			statements.putIfAbsent(handleId, statement);
+		} else {
+			durableStatements.putIfAbsent(handleId, statement);
+		}
+	}
+
 	private ExecuteResult hookPrepareAndExecute(StatementHandle h, String sql, long maxRowCount, int maxRowsInFirstFrame) throws NoSuchStatementException {
 		assertStatementExists(h);
 
 		return prepareProgressiveStatement(sql, statement -> {
-			statements.putIfAbsent(h.id, statement);
+			addStatement(h.id, statement);
 			return execute(h, statement);
 		}).orElse(null);
 	}

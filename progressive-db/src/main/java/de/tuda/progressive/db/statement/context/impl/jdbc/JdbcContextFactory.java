@@ -59,7 +59,7 @@ public class JdbcContextFactory
       final SqlCreateTable createBuffer =
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
       final SqlSelect selectBuffer =
-          getSelectBuffer(metaData, bufferFieldNames, bufferTableName, fieldNames, metaFields);
+          getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields);
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .metaFields(metaFields)
@@ -106,9 +106,14 @@ public class JdbcContextFactory
       final String bufferTableName = view.getName().getSimple();
       final SqlCreateTable createBuffer =
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
+      // TODO use correct select
+      final SqlSelect selectBuffer =
+          getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields);
+
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
           .selectSource(selectSource)
+          .selectBuffer(selectBuffer)
           .metaFields(metaFields)
           .fieldNames(fieldNames)
           .build();
@@ -190,7 +195,7 @@ public class JdbcContextFactory
           break;
         case PROGRESS:
         case PARTITION:
-          // do nothing
+          node = new SqlDynamicParam(0, SqlParserPos.ZERO);
           break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
@@ -307,7 +312,6 @@ public class JdbcContextFactory
   }
 
   private SqlSelect getSelectBuffer(
-      ResultSetMetaData metaData,
       List<String> bufferFieldNames,
       String bufferTableName,
       List<String> fieldNames,
@@ -320,7 +324,7 @@ public class JdbcContextFactory
       final String alias = fieldNames.get(j);
       final MetaField metaField = metaFields.get(j);
 
-      SqlNode newColumn;
+      SqlNode newColumn = null;
 
       switch (metaField) {
         case NONE:
@@ -350,11 +354,16 @@ public class JdbcContextFactory
           newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.FLOAT);
           index++;
           break;
+        case FUTURE:
+          // TODO remove
+          break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
       }
 
-      selectList.add(SqlUtils.getAlias(newColumn, alias));
+      if (newColumn != null) {
+        selectList.add(SqlUtils.getAlias(newColumn, alias));
+      }
     }
 
     return new SqlSelect(

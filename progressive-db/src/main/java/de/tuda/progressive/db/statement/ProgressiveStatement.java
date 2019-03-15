@@ -1,23 +1,23 @@
 package de.tuda.progressive.db.statement;
 
-import de.tuda.progressive.db.statement.old.context.SimpleStatementContext;
+import de.tuda.progressive.db.buffer.SelectDataBuffer;
 
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 
-public interface ProgressiveStatement extends AutoCloseable {
+public interface ProgressiveStatement<T extends SelectDataBuffer> extends AutoCloseable {
 
-	ResultSet getResultSet();
+  ResultSet getResultSet();
 
-	ResultSetMetaData getMetaData();
+  ResultSetMetaData getMetaData();
 
-	int getReadPartitions();
+  T getDataBuffer();
 
-	double getProgress();
+  boolean isDone();
 
-	boolean isDone();
+  void run();
 
-	void run();
+  void close();
 
-	void close();
+  boolean closeWithStatement();
 }

@@ -9,5 +9,5 @@ public interface ProgressiveStatementFactory {
 
 	ProgressiveStatement prepare(Connection connection, SqlSelect select);
 
-//	ProgressiveStatement prepare(SqlCreateProgressiveView createProgressiveView);
+	ProgressiveStatement prepare(Connection connection, SqlCreateProgressiveView createProgressiveView);
 }
