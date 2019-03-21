@@ -30,13 +30,14 @@ public class SimpleBenchmark implements Benchmark {
 			results.add(result);
 		}
 
+		results.remove(0);
 		Collections.sort(results);
 		results.remove(0);
 		results.remove(results.size() - 1);
 
 		final long totalAverage = (long) results.stream().mapToLong(Result::getTime).average().getAsDouble();
 		final List<Long> partitionAverages = IntStream.range(0, partitions)
-				.mapToObj(i -> (long) IntStream.range(0, RUNS - 2)
+				.mapToObj(i -> (long) IntStream.range(0, RUNS - 3)
 						.mapToLong(j -> results.get(j).getTableTimes().get(i))
 						.average()
 						.getAsDouble()
