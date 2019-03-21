@@ -8,11 +8,13 @@ import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlCall;
 import org.apache.calcite.sql.SqlSelect;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBuffer<C> {
 
@@ -81,13 +83,23 @@ public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBu
           }
         });
 
+    final List<MetaField> metaFields = context.getMetaFields();
+    final Map<Integer, Pair<Integer, Integer>> bounds = context.getBounds();
     final List<Object[]> results = new ArrayList<>();
 
     try (ResultSet resultSet = selectBuffer.executeQuery()) {
       while (resultSet.next()) {
         Object[] row = new Object[selectBuffer.getMetaData().getColumnCount()];
         for (int i = 1; i <= row.length; i++) {
-          row[i - 1] = resultSet.getObject(i);
+          if (metaFields.get(i - 1) == MetaField.CONFIDENCE_INTERVAL) {
+            final double count = resultSet.getDouble(i);
+            final Pair<Integer, Integer> bound = bounds.get(i - 1);
+            row[i - 1] =
+                ((double) (bound.getRight() - bound.getLeft()))
+                    * Math.sqrt(1.0 / (2.0 * count) * Math.log(2.0 / (1.0 - 0.95)));
+          } else {
+            row[i - 1] = resultSet.getObject(i);
+          }
         }
         results.add(row);
       }

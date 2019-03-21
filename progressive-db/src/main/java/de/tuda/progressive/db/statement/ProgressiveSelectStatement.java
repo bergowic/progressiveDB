@@ -17,8 +17,6 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
 
   private static final Logger log = LoggerFactory.getLogger(ProgressiveSelectStatement.class);
 
-  private final DataBuffer dataBuffer;
-
   private List<Object[]> results = new ArrayList<>();
 
   public ProgressiveSelectStatement(
@@ -28,8 +26,6 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
       DataBuffer dataBuffer,
       List<Partition> partitions) {
     super(driver, connection, context, dataBuffer, partitions);
-
-    this.dataBuffer = dataBuffer;
   }
 
   @Override

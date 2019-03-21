@@ -4,22 +4,14 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SqliteDriver;
 import de.tuda.progressive.db.sql.parser.SqlParserImpl;
 import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcContextFactory;
+import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.avatica.util.Casing;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.parser.SqlParser;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.*;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -29,286 +21,276 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class JdbcContextFactoryTest {
 
-	private static final DbDriver driver = SqliteDriver.INSTANCE;
+  private static final DbDriver driver = SqliteDriver.INSTANCE;
 
-	private static Connection sourceConnection;
+  private static Connection sourceConnection;
 
-	private static SqlParser.Config config;
+  private static SqlParser.Config config;
 
-	private static JdbcContextFactory contextFactory = new JdbcContextFactory(SqliteDriver.INSTANCE, SqliteDriver.INSTANCE);
+  private static JdbcContextFactory contextFactory;
 
-	private Connection bufferConnection;
+  private Connection bufferConnection;
 
-	@BeforeAll
-	static void beforeAll() throws SQLException {
-		sourceConnection = DriverManager.getConnection("jdbc:sqlite::memory:");
-		config = SqlParser.configBuilder()
-				.setCaseSensitive(true)
-				.setUnquotedCasing(Casing.UNCHANGED)
-				.setParserFactory(SqlParserImpl.FACTORY)
-				.build();
+  @BeforeAll
+  static void beforeAll() throws SQLException {
+    sourceConnection = DriverManager.getConnection("jdbc:sqlite::memory:");
+    contextFactory = new JdbcContextFactory(SqliteDriver.INSTANCE, SqliteDriver.INSTANCE);
+    config = SqlParser.configBuilder().setParserFactory(SqlParserImpl.FACTORY).build();
 
-		try (Statement statement = sourceConnection.createStatement()) {
-			statement.execute("drop table if exists t");
-			statement.execute("create table t (a integer, b integer, c varchar(100), _partition integer)");
-			statement.execute("insert into t values (1, 2, 'a', 0)");
-			statement.execute("insert into t values (3, 4, 'b', 0)");
-			statement.execute("insert into t values (5, 6, 'a', 1)");
-			statement.execute("insert into t values (7, 8, 'b', 1)");
-			statement.execute("insert into t values (9, 10, 'c', 1)");
-		}
-	}
+    try (Statement statement = sourceConnection.createStatement()) {
+      statement.execute("drop table if exists t");
+      statement.execute(
+          "create table t (a integer, b integer, c varchar(100), _partition integer)");
+      statement.execute("insert into t values (1, 2, 'a', 0)");
+      statement.execute("insert into t values (3, 4, 'b', 0)");
+      statement.execute("insert into t values (5, 6, 'a', 1)");
+      statement.execute("insert into t values (7, 8, 'b', 1)");
+      statement.execute("insert into t values (9, 10, 'c', 1)");
+    }
+  }
 
-	@BeforeEach
-	void beforeEach() throws SQLException {
-		bufferConnection = DriverManager.getConnection("jdbc:sqlite::memory:");
-	}
+  @BeforeEach
+  void beforeEach() throws SQLException {
+    bufferConnection = DriverManager.getConnection("jdbc:sqlite::memory:");
+  }
 
-	@AfterEach
-	void afterEach() {
-		SqlUtils.closeSafe(bufferConnection);
-	}
+  @AfterEach
+  void afterEach() {
+    SqlUtils.closeSafe(bufferConnection);
+  }
 
-	@AfterAll
-	static void afterAll() {
-		SqlUtils.closeSafe(sourceConnection);
-	}
+  @AfterAll
+  static void afterAll() {
+    SqlUtils.closeSafe(sourceConnection);
+  }
 
-	private void assertContextNotNull(JdbcContext context) {
-		assertNotNull(context);
-		assertNotNull(context.getMetaFields());
-		assertNotNull(context.getSelectSource());
-		assertNotNull(context.getCreateBuffer());
-		assertNotNull(context.getInsertBuffer());
-		assertNotNull(context.getSelectSource());
-	}
+  private void assertContextNotNull(JdbcSelectContext context) {
+    assertNotNull(context);
+    assertNotNull(context.getMetaFields());
+    assertNotNull(context.getSelectSource());
+    assertNotNull(context.getCreateBuffer());
+    assertNotNull(context.getInsertBuffer());
+    assertNotNull(context.getSelectSource());
+  }
 
-	private void testAggregation(String sql, List<List<Object[]>> expectedValues) throws Exception {
-		final SqlSelect select = (SqlSelect) SqlParser.create(sql, config).parseQuery();
-		final JdbcContext context = contextFactory.create(sourceConnection, select);
+  private void testAggregation(String sql, List<List<Object[]>> expectedValues) throws Exception {
+    final SqlSelect select = (SqlSelect) SqlParser.create(sql, config).parseQuery();
+    final JdbcSelectContext context = contextFactory.create(sourceConnection, select, null);
 
-		assertContextNotNull(context);
+    assertContextNotNull(context);
 
-		try (Statement statement = bufferConnection.createStatement()) {
-			statement.execute(driver.toSql(context.getCreateBuffer()));
+    try (Statement statement = bufferConnection.createStatement()) {
+      statement.execute(driver.toSql(context.getCreateBuffer()));
 
-			final String selectSource = driver.toSql(context.getSelectSource());
-			try (PreparedStatement sourceSelectStatement = sourceConnection.prepareStatement(selectSource)) {
-				final String updateBuffer = context.getUpdateBuffer() == null ? null : driver.toSql(context.getUpdateBuffer());
+      final String selectSource = driver.toSql(context.getSelectSource());
+      try (PreparedStatement sourceSelectStatement =
+          sourceConnection.prepareStatement(selectSource)) {
+        final String updateBuffer =
+            context.getUpdateBuffer() == null ? null : driver.toSql(context.getUpdateBuffer());
 
-				try (PreparedStatement updateBufferStatement = updateBuffer == null ? null : bufferConnection.prepareStatement(updateBuffer)) {
-					final String insertBuffer = driver.toSql(context.getInsertBuffer());
+        try (PreparedStatement updateBufferStatement =
+            updateBuffer == null ? null : bufferConnection.prepareStatement(updateBuffer)) {
+          final String insertBuffer = driver.toSql(context.getInsertBuffer());
 
-					try (PreparedStatement insertBufferStatement = bufferConnection.prepareStatement(insertBuffer)) {
-						final String selectBuffer = driver.toSql(context.getSelectBuffer());
+          try (PreparedStatement insertBufferStatement =
+              bufferConnection.prepareStatement(insertBuffer)) {
+            final String selectBuffer = driver.toSql(context.getSelectBuffer());
 
-						try (PreparedStatement selectBufferStatement = bufferConnection.prepareStatement(selectBuffer)) {
-							for (int i = 0; i < expectedValues.size(); i++) {
-								sourceSelectStatement.setInt(1, i);
-								try (ResultSet result = sourceSelectStatement.executeQuery()) {
-									while (result.next()) {
-										final int columnCount = result.getMetaData().getColumnCount();
+            try (PreparedStatement selectBufferStatement =
+                bufferConnection.prepareStatement(selectBuffer)) {
+              for (int i = 0; i < expectedValues.size(); i++) {
+                sourceSelectStatement.setInt(1, i);
+                try (ResultSet result = sourceSelectStatement.executeQuery()) {
+                  while (result.next()) {
+                    final int columnCount = result.getMetaData().getColumnCount();
 
-										if (updateBufferStatement != null) {
-											for (int j = 1; j <= columnCount; j++) {
-												updateBufferStatement.setObject(j, result.getObject(j));
-											}
-										}
+                    if (updateBufferStatement != null) {
+                      for (int j = 1; j <= columnCount; j++) {
+                        updateBufferStatement.setObject(j, result.getObject(j));
+                      }
+                    }
 
-										if (updateBufferStatement == null || updateBufferStatement.executeUpdate() == 0) {
-											for (int j = 1; j <= columnCount; j++) {
-												insertBufferStatement.setObject(j, result.getObject(j));
+                    if (updateBufferStatement == null
+                        || updateBufferStatement.executeUpdate() == 0) {
+                      for (int j = 1; j <= columnCount; j++) {
+                        insertBufferStatement.setObject(j, result.getObject(j));
 
-												if (select.getGroup() != null) {
-													insertBufferStatement.setObject(j + columnCount, result.getObject(j));
-												}
-											}
+                        if (select.getGroup() != null) {
+                          insertBufferStatement.setObject(j + columnCount, result.getObject(j));
+                        }
+                      }
 
-											insertBufferStatement.execute();
-										}
-									}
-								}
+                      insertBufferStatement.execute();
+                    }
+                  }
+                }
 
-								final List<MetaField> metaFields = context.getMetaFields();
-								for (int j = 0; j < metaFields.size(); j++) {
-									switch (metaFields.get(j)) {
-										case COUNT:
-										case SUM:
-											selectBufferStatement.setDouble(j + 1, (double) (i + 1) / (double) expectedValues.size());
-											break;
-									}
-								}
+                final List<MetaField> metaFields = context.getMetaFields();
+                for (int j = 0; j < metaFields.size(); j++) {
+                  switch (metaFields.get(j)) {
+                    case COUNT:
+                    case SUM:
+                      selectBufferStatement.setDouble(
+                          j + 1, (double) (i + 1) / (double) expectedValues.size());
+                      break;
+                  }
+                }
 
-								final int partition = i;
-								SqlUtils.setMetaFields(selectBufferStatement, context::getFunctionMetaFieldPos, new HashMap<MetaField, Object>() {{
-									put(MetaField.PARTITION, partition);
-									put(MetaField.PROGRESS, (double) (partition + 1) / (double) expectedValues.size());
-								}});
+                final int partition = i;
+                SqlUtils.setMetaFields(
+                    selectBufferStatement,
+                    context::getFunctionMetaFieldPos,
+                    new HashMap<MetaField, Object>() {
+                      {
+                        put(MetaField.PARTITION, partition);
+                        put(
+                            MetaField.PROGRESS,
+                            (double) (partition + 1) / (double) expectedValues.size());
+                      }
+                    });
 
-								try (ResultSet result = selectBufferStatement.executeQuery()) {
-									for (Object[] expectedRow : expectedValues.get(i)) {
-										assertTrue(result.next());
-										assertEquals(expectedRow.length, result.getMetaData().getColumnCount());
+                try (ResultSet result = selectBufferStatement.executeQuery()) {
+                  for (Object[] expectedRow : expectedValues.get(i)) {
+                    assertTrue(result.next());
+                    assertEquals(expectedRow.length, result.getMetaData().getColumnCount());
 
-										for (int j = 0; j < metaFields.size(); j++) {
-											assertEquals(expectedRow[j], result.getObject(j + 1));
-										}
-									}
+                    for (int j = 0; j < metaFields.size(); j++) {
+                      assertEquals(expectedRow[j], result.getObject(j + 1));
+                    }
+                  }
 
-									assertFalse(result.next());
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+                  assertFalse(result.next());
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 
-	private Object[] valuesRow(Object... values) {
-		return values;
-	}
+  private Object[] valuesRow(Object... values) {
+    return values;
+  }
 
-	private List<Object[]> singleValueRowPartition(Object value) {
-		return valuesPartition(new Object[]{value});
-	}
+  private List<Object[]> singleValueRowPartition(Object value) {
+    return valuesPartition(new Object[] {value});
+  }
 
-	private List<Object[]> valuesPartition(Object[]... valueRows) {
-		return Arrays.asList(valueRows);
-	}
+  private List<Object[]> valuesPartition(Object[]... valueRows) {
+    return Arrays.asList(valueRows);
+  }
 
-	private List<List<Object[]>> singleValueRowsPartitions(Object... values) {
-		return Arrays.stream(values)
-				.map(this::singleValueRowPartition)
-				.collect(Collectors.toList());
-	}
+  private List<List<Object[]>> singleValueRowsPartitions(Object... values) {
+    return Arrays.stream(values).map(this::singleValueRowPartition).collect(Collectors.toList());
+  }
 
-	@Test
-	void testAvg() throws Exception {
-		final String sql = "select avg(a) from t";
+  @Test
+  void testAvg() throws Exception {
+    final String sql = "select avg(a) from t";
 
-		testAggregation(sql, singleValueRowsPartitions(2.0, 5.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(2.0, 5.0));
+  }
 
-	@Test
-	void testCount() throws Exception {
-		final String sql = "select count(a) from t";
+  @Test
+  void testCount() throws Exception {
+    final String sql = "select count(a) from t";
 
-		testAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(4.0, 5.0));
+  }
 
-	@Test
-	void testSum() throws Exception {
-		final String sql = "select sum(a) from t";
+  @Test
+  void testSum() throws Exception {
+    final String sql = "select sum(a) from t";
 
-		testAggregation(sql, singleValueRowsPartitions(8.0, 25.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(8.0, 25.0));
+  }
 
-	@Test
-	void testAvgWhere() throws Exception {
-		final String sql = "select avg(a) from t where c = 'a'";
+  @Test
+  void testAvgWhere() throws Exception {
+    final String sql = "select avg(a) from t where c = 'a'";
 
-		testAggregation(sql, singleValueRowsPartitions(1.0, 3.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(1.0, 3.0));
+  }
 
-	@Test
-	void testCountWhere() throws Exception {
-		final String sql = "select count(a) from t where c = 'a'";
+  @Test
+  void testCountWhere() throws Exception {
+    final String sql = "select count(a) from t where c = 'a'";
 
-		testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
+  }
 
-	@Test
-	void testSumWhere() throws Exception {
-		final String sql = "select sum(a) from t where c = 'a'";
+  @Test
+  void testSumWhere() throws Exception {
+    final String sql = "select sum(a) from t where c = 'a'";
 
-		testAggregation(sql, singleValueRowsPartitions(2.0, 6.0));
-	}
+    testAggregation(sql, singleValueRowsPartitions(2.0, 6.0));
+  }
 
-	@Test
-	void testPartition() throws Exception {
-		final String sql = "select count(a), progressive_partition() from t";
+  @Test
+  void testPartition() throws Exception {
+    final String sql = "select count(a), progressive_partition() from t";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(valuesRow(4.0, 0)),
-				valuesPartition(valuesRow(5.0, 1))
-		));
-	}
+    testAggregation(
+        sql, Arrays.asList(valuesPartition(valuesRow(4.0, 0)), valuesPartition(valuesRow(5.0, 1))));
+  }
 
-	@Test
-	void testProgress() throws Exception {
-		final String sql = "select avg(a), progressive_progress() from t";
+  @Test
+  void testProgress() throws Exception {
+    final String sql = "select avg(a), progressive_progress() from t";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(valuesRow(2.0, 0.5)),
-				valuesPartition(valuesRow(5.0, 1.0))
-		));
-	}
+    testAggregation(
+        sql,
+        Arrays.asList(valuesPartition(valuesRow(2.0, 0.5)), valuesPartition(valuesRow(5.0, 1.0))));
+  }
 
-	@Test
-	void testOrder() throws Exception {
-		final String sql = "select progressive_partition(), progressive_progress(), count(a) from t";
+  @Test
+  void testOrder() throws Exception {
+    final String sql = "select progressive_partition(), progressive_progress(), count(a) from t";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(valuesRow(0, 0.5, 4.0)),
-				valuesPartition(valuesRow(1, 1.0, 5.0))
-		));
-	}
+    testAggregation(
+        sql,
+        Arrays.asList(
+            valuesPartition(valuesRow(0, 0.5, 4.0)), valuesPartition(valuesRow(1, 1.0, 5.0))));
+  }
 
-	@Test
-	void testGroupByAvg() throws Exception {
-		final String sql = "select avg(a), c from t group by c";
+  @Test
+  void testGroupByAvg() throws Exception {
+    final String sql = "select avg(a), c from t group by c";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(
-						valuesRow(1.0, "a"),
-						valuesRow(3.0, "b")
-				),
-				valuesPartition(
-						valuesRow(3.0, "a"),
-						valuesRow(5.0, "b"),
-						valuesRow(9.0, "c")
-				)
-		));
-	}
+    testAggregation(
+        sql,
+        Arrays.asList(
+            valuesPartition(valuesRow(1.0, "a"), valuesRow(3.0, "b")),
+            valuesPartition(valuesRow(3.0, "a"), valuesRow(5.0, "b"), valuesRow(9.0, "c"))));
+  }
 
-	@Test
-	void testGroupByCount() throws Exception {
-		final String sql = "select count(a), c from t group by c";
+  @Test
+  void testGroupByCount() throws Exception {
+    final String sql = "select count(a), c from t group by c";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(
-						valuesRow(2.0, "a"),
-						valuesRow(2.0, "b")
-				),
-				valuesPartition(
-						valuesRow(2.0, "a"),
-						valuesRow(2.0, "b"),
-						valuesRow(1.0, "c")
-				)
-		));
-	}
+    testAggregation(
+        sql,
+        Arrays.asList(
+            valuesPartition(valuesRow(2.0, "a"), valuesRow(2.0, "b")),
+            valuesPartition(valuesRow(2.0, "a"), valuesRow(2.0, "b"), valuesRow(1.0, "c"))));
+  }
 
-	@Test
-	void testGroupBySum() throws Exception {
-		final String sql = "select sum(a), c from t group by c";
+  @Test
+  void testGroupBySum() throws Exception {
+    final String sql = "select sum(a), c from t group by c";
 
-		testAggregation(sql, Arrays.asList(
-				valuesPartition(
-						valuesRow(2.0, "a"),
-						valuesRow(6.0, "b")
-				),
-				valuesPartition(
-						valuesRow(6.0, "a"),
-						valuesRow(10.0, "b"),
-						valuesRow(9.0, "c")
-				)
-		));
-	}
-	@Test
-	void testColumnAlias() throws Exception {
-		final String sql = "select count(a) a from t where c = 'a'";
+    testAggregation(
+        sql,
+        Arrays.asList(
+            valuesPartition(valuesRow(2.0, "a"), valuesRow(6.0, "b")),
+            valuesPartition(valuesRow(6.0, "a"), valuesRow(10.0, "b"), valuesRow(9.0, "c"))));
+  }
 
-		testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
-	}
+  @Test
+  void testColumnAlias() throws Exception {
+    final String sql = "select count(a) a from t where c = 'a'";
+
+    testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
+  }
 }

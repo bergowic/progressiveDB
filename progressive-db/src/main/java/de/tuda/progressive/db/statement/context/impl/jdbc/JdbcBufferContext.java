@@ -3,8 +3,10 @@ package de.tuda.progressive.db.statement.context.impl.jdbc;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import org.apache.calcite.sql.SqlSelect;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
+import java.util.Map;
 
 public class JdbcBufferContext extends JdbcSourceContext {
 
@@ -14,10 +16,11 @@ public class JdbcBufferContext extends JdbcSourceContext {
 
   public JdbcBufferContext(
       List<MetaField> metaFields,
+      Map<Integer, Pair<Integer, Integer>> bounds,
       SqlSelect selectSource,
       List<String> fieldNames,
       SqlSelect selectBuffer) {
-    super(metaFields, selectSource);
+    super(metaFields, bounds, selectSource);
 
     this.fieldNames = fieldNames;
     this.selectBuffer = selectBuffer;
@@ -59,12 +62,16 @@ public class JdbcBufferContext extends JdbcSourceContext {
     }
 
     @Override
-    protected final C build(List<MetaField> metaFields, SqlSelect selectSource) {
-      return build(metaFields, selectSource, fieldNames, selectBuffer);
+    protected final C build(
+        List<MetaField> metaFields,
+        Map<Integer, Pair<Integer, Integer>> bounds,
+        SqlSelect selectSource) {
+      return build(metaFields, bounds, selectSource, fieldNames, selectBuffer);
     }
 
     protected abstract C build(
         List<MetaField> metaFields,
+        Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<String> fieldNames,
         SqlSelect selectBuffer);
@@ -74,10 +81,11 @@ public class JdbcBufferContext extends JdbcSourceContext {
     @Override
     protected JdbcBufferContext build(
         List<MetaField> metaFields,
+        Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<String> fieldNames,
         SqlSelect selectBuffer) {
-      return new JdbcBufferContext(metaFields, selectSource, fieldNames, selectBuffer);
+      return new JdbcBufferContext(metaFields, bounds, selectSource, fieldNames, selectBuffer);
     }
   }
 }

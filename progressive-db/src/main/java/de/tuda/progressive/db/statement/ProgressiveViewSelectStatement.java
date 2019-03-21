@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.util.SqlUtils;
 
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -69,6 +70,7 @@ public class ProgressiveViewSelectStatement
 
   @Override
   public void close() {
+    SqlUtils.closeSafe(dataBuffer);
     view.removeListener(this);
   }
 

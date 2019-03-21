@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement.context.impl;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureNode;
 import de.tuda.progressive.db.statement.context.ContextFactory;
@@ -10,6 +11,7 @@ import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.Connection;
 import java.util.Collections;
@@ -29,29 +31,40 @@ public abstract class BaseContextFactory<
   }
 
   @Override
-  public C1 create(Connection connection, SqlSelect select) {
+  public C1 create(
+      Connection connection,
+      SqlSelect select,
+      Function<Pair<String, String>, Column> columnMapper) {
     final List<MetaField> metaFields = getMetaFields(select.getSelectList());
     final SqlSelect selectSource = transformSelect(select, metaFields);
 
-    return create(connection, select, metaFields, selectSource);
+    return create(connection, select, columnMapper, metaFields, selectSource);
   }
 
   @Override
-  public C1 create(Connection connection, SqlCreateProgressiveView view) {
+  public C1 create(
+      Connection connection,
+      SqlCreateProgressiveView view,
+      Function<Pair<String, String>, Column> columnMapper) {
     final SqlSelect select = (SqlSelect) view.getQuery();
 
     final List<MetaField> metaFields = getMetaFields(select.getSelectList());
     final SqlSelect selectSource = transformSelect(select, metaFields);
 
-    return create(connection, view, metaFields, selectSource);
+    return create(connection, view, columnMapper, metaFields, selectSource);
   }
 
   protected abstract C1 create(
-      Connection connection, SqlSelect select, List<MetaField> metaFields, SqlSelect selectSource);
+      Connection connection,
+      SqlSelect select,
+      Function<Pair<String, String>, Column> columnMapper,
+      List<MetaField> metaFields,
+      SqlSelect selectSource);
 
   protected abstract C1 create(
       Connection connection,
       SqlCreateProgressiveView view,
+      Function<Pair<String, String>, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource);
 
@@ -105,6 +118,8 @@ public abstract class BaseContextFactory<
           return MetaField.PARTITION;
         case "PROGRESSIVE_PROGRESS":
           return MetaField.PROGRESS;
+        case "PROGRESSIVE_CONFIDENCE":
+          return MetaField.CONFIDENCE_INTERVAL;
       }
 
       throw new IllegalArgumentException("operation is not supported: " + operator.getName());
@@ -124,9 +139,10 @@ public abstract class BaseContextFactory<
     final SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
 
     for (int i = 0; i < oldSelectList.size(); i++) {
+      SqlBasicCall call;
       switch (metaFields.get(i)) {
         case AVG:
-          SqlBasicCall call = (SqlBasicCall) oldSelectList.get(i);
+          call = (SqlBasicCall) oldSelectList.get(i);
           SqlBasicCall avg;
           if (call.getKind() == SqlKind.AS) {
             avg = (SqlBasicCall) call.getOperands()[0];
@@ -148,6 +164,10 @@ public abstract class BaseContextFactory<
           break;
         case FUTURE:
           selectList.add(removeFuture(oldSelectList.get(i)));
+          break;
+        case CONFIDENCE_INTERVAL:
+          call = (SqlBasicCall) oldSelectList.get(i);
+          selectList.add(SqlUtils.createCountAggregation(call.getOperands()));
           break;
         default:
           throw new IllegalArgumentException("metaField not supported: " + metaFields.get(i));

@@ -5,8 +5,10 @@ import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
+import java.util.Map;
 
 public class JdbcSelectContext extends JdbcBufferContext {
 
@@ -18,13 +20,14 @@ public class JdbcSelectContext extends JdbcBufferContext {
 
   public JdbcSelectContext(
       List<MetaField> metaFields,
+      Map<Integer, Pair<Integer, Integer>> bounds,
       SqlSelect selectSource,
       List<String> fieldNames,
       SqlCreateTable createBuffer,
       SqlInsert insertBuffer,
       SqlUpdate updateBuffer,
       SqlSelect selectBuffer) {
-    super(metaFields, selectSource, fieldNames, selectBuffer);
+    super(metaFields, bounds, selectSource, fieldNames, selectBuffer);
 
     this.createBuffer = createBuffer;
     this.insertBuffer = insertBuffer;
@@ -69,11 +72,13 @@ public class JdbcSelectContext extends JdbcBufferContext {
     @Override
     protected final JdbcSelectContext build(
         List<MetaField> metaFields,
+        Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<String> fieldNames,
         SqlSelect selectBuffer) {
       return new JdbcSelectContext(
           metaFields,
+          bounds,
           selectSource,
           fieldNames,
           createBuffer,

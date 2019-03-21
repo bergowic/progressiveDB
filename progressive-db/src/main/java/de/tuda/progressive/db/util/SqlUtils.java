@@ -156,6 +156,7 @@ public class SqlUtils {
             break;
           case NONE:
           case FUTURE:
+          case CONFIDENCE_INTERVAL:
             // do nothing
             break;
           case AVG:

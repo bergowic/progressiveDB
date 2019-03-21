@@ -1,16 +1,21 @@
 package de.tuda.progressive.db.statement.context.impl;
 
 import de.tuda.progressive.db.statement.context.MetaField;
+import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 public abstract class BaseContext {
 
   private final List<MetaField> metaFields;
 
-  public BaseContext(List<MetaField> metaFields) {
+  private final Map<Integer, Pair<Integer, Integer>> bounds;
+
+  public BaseContext(List<MetaField> metaFields, Map<Integer, Pair<Integer, Integer>> bounds) {
     this.metaFields = metaFields;
+    this.bounds = bounds;
   }
 
   public Optional<Integer> getFunctionMetaFieldPos(MetaField metaField, boolean substitute) {
@@ -36,19 +41,35 @@ public abstract class BaseContext {
     return metaFields;
   }
 
+  public Map<Integer, Pair<Integer, Integer>> getBounds() {
+    return bounds;
+  }
+
+  public Pair<Integer, Integer> getBound(int index) {
+    return bounds.get(index);
+  }
+
   @SuppressWarnings("unchecked")
   public abstract static class Builder<C extends BaseContext, B extends Builder<C, B>> {
     private List<MetaField> metaFields;
+
+    private Map<Integer, Pair<Integer, Integer>> bounds;
 
     public B metaFields(List<MetaField> metaFields) {
       this.metaFields = metaFields;
       return (B) this;
     }
 
-    public final C build() {
-      return build(metaFields);
+    public B bounds(Map<Integer, Pair<Integer, Integer>> bounds) {
+      this.bounds = bounds;
+      return (B) this;
     }
 
-    protected abstract C build(List<MetaField> metaFields);
+    public final C build() {
+      return build(metaFields, bounds);
+    }
+
+    protected abstract C build(
+        List<MetaField> metaFields, Map<Integer, Pair<Integer, Integer>> bounds);
   }
 }

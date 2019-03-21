@@ -27,9 +27,11 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
   protected final ResultSetMetaData metaData;
 
-  private final DataBuffer dataBuffer;
+  protected final DataBuffer dataBuffer;
 
   private boolean isClosed;
+
+  private final Connection connection;
 
   public ProgressiveBaseStatement(
       DbDriver driver,
@@ -39,6 +41,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
       List<Partition> partitions) {
     this.dataBuffer = dataBuffer;
     this.partitions = partitions;
+    this.connection = connection;
 
     try {
       preparedStatement = connection.prepareStatement(driver.toSql(context.getSelectSource()));
@@ -119,7 +122,9 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
   public synchronized void close() {
     isClosed = true;
 
+    SqlUtils.closeSafe(dataBuffer);
     SqlUtils.closeSafe(preparedStatement);
+    SqlUtils.closeSafe(connection);
   }
 
   protected final synchronized int getReadPartitions() {

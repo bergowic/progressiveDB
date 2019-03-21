@@ -7,7 +7,8 @@ public enum MetaField {
   SUM(false, true),
   FUTURE(false, false),
   PARTITION(true, true),
-  PROGRESS(true, true);
+  PROGRESS(true, true),
+  CONFIDENCE_INTERVAL(true, false);
 
   private final boolean function;
 

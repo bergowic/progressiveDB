@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement.context.impl.jdbc;
 
 import de.tuda.progressive.db.buffer.impl.JdbcDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureNode;
 import de.tuda.progressive.db.sql.parser.SqlUpsert;
@@ -22,10 +23,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -47,10 +45,15 @@ public class JdbcContextFactory
 
   @Override
   protected JdbcSelectContext create(
-      Connection connection, SqlSelect select, List<MetaField> metaFields, SqlSelect selectSource) {
+      Connection connection,
+      SqlSelect select,
+      Function<Pair<String, String>, Column> columnMapper,
+      List<MetaField> metaFields,
+      SqlSelect selectSource) {
     final List<String> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields);
+    final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
     final String sql = sourceDriver.toSql(selectSource);
 
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -63,6 +66,7 @@ public class JdbcContextFactory
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .metaFields(metaFields)
+          .bounds(bounds)
           .selectSource(selectSource)
           .fieldNames(fieldNames)
           .createBuffer(createBuffer)
@@ -75,16 +79,23 @@ public class JdbcContextFactory
   }
 
   @Override
-  public JdbcSourceContext create(JdbcDataBuffer dataBuffer, SqlSelect select) {
+  public JdbcSourceContext create(
+      JdbcDataBuffer dataBuffer,
+      SqlSelect select,
+      Function<Pair<String, String>, Column> columnMapper) {
     final JdbcSelectContext context = dataBuffer.getContext();
     final Pair<SqlSelect, List<Integer>> transformed = transformSelect(context, select);
 
     final List<MetaField> metaFields =
         getMetaFields(context.getMetaFields(), transformed.getRight());
     final SqlSelect selectBuffer = transformed.getLeft();
+    final Map<Integer, Pair<Integer, Integer>> bounds =
+        getBounds(
+            context::getFieldIndex, metaFields, context::getBound, selectBuffer.getSelectList());
 
     return new JdbcSourceContext.Builder()
         .metaFields(metaFields)
+        .bounds(bounds)
         .selectSource(selectBuffer)
         .build();
   }
@@ -93,12 +104,14 @@ public class JdbcContextFactory
   protected JdbcSelectContext create(
       Connection connection,
       SqlCreateProgressiveView view,
+      Function<Pair<String, String>, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource) {
     final SqlSelect select = (SqlSelect) view.getQuery();
     final List<String> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields);
+    final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
     final String sql = sourceDriver.toSql(selectSource);
 
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
@@ -113,6 +126,7 @@ public class JdbcContextFactory
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
           .selectSource(selectSource)
+          .bounds(bounds)
           .selectBuffer(selectBuffer)
           .metaFields(metaFields)
           .fieldNames(fieldNames)
@@ -121,6 +135,61 @@ public class JdbcContextFactory
       // TODO
       throw new RuntimeException(e);
     }
+  }
+
+  private Map<Integer, Pair<Integer, Integer>> getBounds(
+      Function<String, Integer> fieldMapper,
+      List<MetaField> metaFields,
+      Function<Integer, Pair<Integer, Integer>> boundMapper,
+      SqlNodeList selectList) {
+    final Map<Integer, Pair<Integer, Integer>> bounds = new HashMap<>();
+
+    for (int i = 0; i < metaFields.size(); i++) {
+      if (metaFields.get(i) == MetaField.CONFIDENCE_INTERVAL) {
+        SqlNode node = selectList.get(i);
+        String fieldName = null;
+
+        if (node instanceof SqlBasicCall) {
+          final SqlBasicCall call = (SqlBasicCall) node;
+
+          if (SqlStdOperatorTable.AS.equals(call.getOperator())) {
+            node = call.operand(1);
+          }
+        }
+
+        if (node instanceof SqlIdentifier) {
+          fieldName = ((SqlIdentifier) node).getSimple();
+        }
+
+        final int index = fieldMapper.apply(fieldName);
+        bounds.put(i, boundMapper.apply(index));
+      }
+    }
+
+    return bounds;
+  }
+
+  private Map<Integer, Pair<Integer, Integer>> getBounds(
+      Function<Pair<String, String>, Column> columnMapper,
+      List<MetaField> metaFields,
+      SqlSelect select) {
+    final SqlNodeList selectList = select.getSelectList();
+    final String table = ((SqlIdentifier) select.getFrom()).getSimple();
+    final Map<Integer, Pair<Integer, Integer>> bounds = new HashMap<>();
+
+    for (int i = 0; i < metaFields.size(); i++) {
+      if (metaFields.get(i) == MetaField.CONFIDENCE_INTERVAL) {
+        SqlBasicCall node = (SqlBasicCall) selectList.get(i);
+        if (SqlStdOperatorTable.AS.equals(node.getOperator())) {
+          node = node.operand(0);
+        }
+
+        final String columnName = ((SqlIdentifier) node.operand(0)).getSimple();
+        final Column column = columnMapper.apply(ImmutablePair.of(table, columnName));
+        bounds.put(i, ImmutablePair.of((int) column.getMin(), (int) column.getMax()));
+      }
+    }
+    return bounds;
   }
 
   private Pair<SqlSelect, List<Integer>> transformSelect(
@@ -197,6 +266,11 @@ public class JdbcContextFactory
         case PARTITION:
           node = new SqlDynamicParam(0, SqlParserPos.ZERO);
           break;
+        case CONFIDENCE_INTERVAL:
+          node =
+              SqlUtils.createCast(
+                  SqlUtils.getIdentifier(getBufferFieldName(index, metaField)), SqlTypeName.FLOAT);
+          break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
       }
@@ -268,6 +342,9 @@ public class JdbcContextFactory
         case PROGRESS:
           i++;
           break;
+        case CONFIDENCE_INTERVAL:
+          fieldNames.add(getBufferFieldName(i++, metaField));
+          break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
       }
@@ -328,8 +405,7 @@ public class JdbcContextFactory
 
       switch (metaField) {
         case NONE:
-          newColumn = SqlUtils.getIdentifier(bufferFieldNames.get(i));
-          i++;
+          newColumn = SqlUtils.getIdentifier(bufferFieldNames.get(i++));
           break;
         case AVG:
           newColumn =
@@ -342,20 +418,21 @@ public class JdbcContextFactory
         case SUM:
           newColumn =
               SqlUtils.createPercentAggregation(
-                  index, SqlUtils.getIdentifier(bufferFieldNames.get(i)));
-          i++;
-          index++;
+                  index++, SqlUtils.getIdentifier(bufferFieldNames.get(i++)));
           break;
         case PARTITION:
-          newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.INTEGER);
-          index++;
+          newColumn = SqlUtils.createFunctionMetaField(index++, SqlTypeName.INTEGER);
           break;
         case PROGRESS:
-          newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.FLOAT);
-          index++;
+          newColumn = SqlUtils.createFunctionMetaField(index++, SqlTypeName.FLOAT);
           break;
         case FUTURE:
           // TODO remove
+          break;
+        case CONFIDENCE_INTERVAL:
+          newColumn =
+              SqlUtils.createCast(
+                  SqlUtils.getIdentifier(bufferFieldNames.get(i++)), SqlTypeName.FLOAT);
           break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
@@ -478,8 +555,7 @@ public class JdbcContextFactory
   }
 
   private SqlInsert getInsertBuffer(
-      List<String> bufferFieldNames, String bufferTableName, SqlNodeList indexColumns)
-      throws SQLException {
+      List<String> bufferFieldNames, String bufferTableName, SqlNodeList indexColumns) {
     final int count = bufferFieldNames.size();
 
     final SqlIdentifier targetTable = new SqlIdentifier(bufferTableName, SqlParserPos.ZERO);

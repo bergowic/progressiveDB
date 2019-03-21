@@ -153,6 +153,7 @@ public class ProgressiveMeta extends JdbcMeta {
 			super.closeStatement(h);
 		} else {
 			statement.close();
+			statements.remove(h.id);
 		}
 	}
 
