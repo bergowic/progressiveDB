@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ProgressiveDB - Demo</title>
+
+  <link rel="stylesheet" type="text/css" href="css/libs/bootstrap.min.css"/>
+  <link rel="stylesheet" type="text/css" href="css/d3.css"/>
+</head>
+<body>
+
+<div class="">
+  <div id="header" class="container-fluid">
+    <div class="row">
+      <div class="col-md-6 offset-md-3">
+        <form>
+          <div class="form-group row">
+            <label class="col-md-2">DB Engine:</label>
+            <div class="col-md-10">
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" name="db" type="radio" id="db-postgresql" value="postgresql">
+                <label class="form-check-label" for="db-postgresql">PostgreSQL</label>
+              </div>
+              <div class="form-check form-check-inline">
+                <input class="form-check-input" name="db" type="radio" id="db-mysql" value="mysql">
+                <label class="form-check-label" for="db-mysql">MySQL</label>
+              </div>
+            </div>
+          </div>
+          <div class="form-group row">
+            <label class="col-md-2" for="query-select">Query:</label>
+            <select id="query-select" class="form-control col-md-10">
+              <option value="" disabled selected>Select a Query</option>
+              <br />
+              <option>Average Arrival Delay per Airport</option>
+              <option>Average Departure Delay per Airport</option>
+              <option>Departures per Airport</option>
+              <option>Arrivals per Airport</option>
+              <option>Average Arrival Delay per Month</option>
+              <option>Average Departure Delay per Month</option>
+            </select>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-2 offset-md-1">
+        <button class="btn btn-primary" style="width: 140px; margin-bottom: 10px" onclick="window.open('log.html', '_blank', 'width=710,height=490,left=680,top=360');">Query Log</button>
+        <br />
+        <button class="btn btn-primary" style="width: 140px;" onclick="window.open('view.html', '_blank', 'width=' + window.outerWidth / 2 + ',height=' + (window.outerHeight - 100) + ',left=0,top=0');">Query Steering</button>
+      </div>
+    </div>
+  </div>
+  <div id="progressive" style="width: 50%; float: left">
+    <h3>ProgressiveDB</h3>
+
+    <div class="origin">
+      <div class="chart">
+        <svg />
+      </div>
+
+      <div class="progress-container">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <h5 class="progress-label">Processing...</h5>
+      </div>
+    </div>
+
+    <div class="time">
+      <div class="chart">
+        <svg />
+      </div>
+
+      <div class="progress-container">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <h5 class="progress-label">Processing...</h5>
+      </div>
+    </div>
+  </div>
+  <div id="native" style="width: 50%; float: left">
+    <h3>PostgreSQL Native</h3>
+
+    <div class="origin">
+      <div class="chart">
+        <svg />
+      </div>
+
+      <div class="progress-container">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <h5 class="progress-label">Processing...</h5>
+      </div>
+    </div>
+
+    <div class="time">
+      <div class="chart">
+        <svg />
+      </div>
+
+      <div class="progress-container">
+        <div class="progress">
+          <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <h5 class="progress-label">Processing...</h5>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="bundle.js"></script>
+<script>
+  document.getElementById('query-select').onchange = () => {
+    const headerHeight = document.getElementById('header').clientHeight;
+    const windowHeight = window.innerHeight;
+    document.getElementById('progressive').style.height = (windowHeight - headerHeight - 50) + 'px';
+    document.getElementById('native').style.height = (windowHeight - headerHeight - 50) + 'px';
+    document.getElementById('progressive').style.display = 'block';
+    document.getElementById('native').style.display = 'block';
+
+    start(true);
+    start(false);
+  };
+</script>
+</body>
+</html>

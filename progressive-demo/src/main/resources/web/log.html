@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ProgressiveDB - Logs</title>
+
+    <link rel="stylesheet" type="text/css" href="css/libs/bootstrap.min.css"/>
+</head>
+<body style="overflow: hidden">
+<h5>Application Queries</h5>
+  <pre id="logs-app" style="overflow: hidden; font-size: 12px; height: 100px"></pre>
+
+<h5>ProgressiveDB Queries</h5>
+  <pre id="logs-progressive" style="overflow: hidden; font-size: 12px"></pre>
+  <script type="application/javascript">
+    const socket = new WebSocket('ws://' + window.location.hostname + ':8081');
+    const logsApp = document.getElementById('logs-app');
+    const logsProgressive = document.getElementById('logs-progressive');
+
+    socket.onopen = () => {
+      socket.send('log');
+    };
+
+    socket.onmessage = e => {
+      const data = JSON.parse(e.data);
+      if (data.progressive) {
+        logsProgressive.innerHTML = data.log + '\n' + logsProgressive.innerHTML;
+      } else {
+        logsApp.innerHTML = data.log + '\n' + logsApp.innerHTML;
+      }
+    }
+  </script>
+</body>
+</html>

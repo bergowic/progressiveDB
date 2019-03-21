@@ -1,0 +1,150 @@
+html {
+  height: 100%;
+}
+
+body {
+  height: 100%;
+  margin-left: 15px;
+  margin-right: 15px;
+  padding-top: 15px;
+}
+
+#progressive {
+  display: none;
+}
+
+#native {
+  display: none;
+  border-left: 2px solid lightgray;
+}
+
+form label {
+  text-align: right;
+}
+
+h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0;
+}
+
+h5 {
+  font-size: 1.1rem;
+}
+
+h1, h3, h5 {
+  text-align: center;
+}
+
+.progress {
+  margin-left: 100px;
+  margin-right: 100px;
+  margin-top: 100px;
+}
+
+.progress-label {
+  text-align: center;
+}
+
+label[for="query-select"] {
+  line-height: 2.3;
+}
+
+#query-select {
+  margin-left: 15px;
+  margin-right: -15px;
+}
+
+#db-postgresql {
+  padding-left: 0;
+}
+
+#console {
+  font-size: 9pt;
+  margin-left: 20px;
+  margin-right: -20px;
+}
+
+div#layout {
+/*  text-align: center;*/
+}
+
+.time {
+  display: none;
+}
+
+.chart {
+  width: 100%;
+  height: 300px;
+  margin: auto;
+  display: none;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+}
+
+.bar {
+/*  fill: #80cbc4;*/
+  fill: #2F4A6D;
+  cursor: pointer;
+}
+
+.bar.active {
+  fill: #80bdff;
+}
+
+text.value {
+  fill: #fff;
+}
+
+text {
+  font-size: 12px;
+/*  fill: #fff;*/
+}
+
+path {
+  stroke: gray;
+}
+
+line {
+  stroke: gray;
+}
+
+line#limit {
+  stroke: #FED966;
+  stroke-width: 3;
+  stroke-dasharray: 3 6;
+}
+
+.grid path {
+  stroke-width: 0;
+}
+
+.grid .tick line {
+  stroke: #9FAAAE;
+  stroke-opacity: 0.3;
+}
+
+text.divergence {
+  font-size: 14px;
+  fill: #2F4A6D;
+}
+
+text.value {
+  font-size: 14px;
+}
+
+text.title {
+  font-size: 20px;
+  font-weight: 600;
+}
+
+text.label {
+  font-size: 14px;
+  font-weight: 400;
+}
+
+text.source {
+  font-size: 10px;
+}
