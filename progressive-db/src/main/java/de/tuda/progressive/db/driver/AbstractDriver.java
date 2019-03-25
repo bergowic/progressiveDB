@@ -3,162 +3,178 @@ package de.tuda.progressive.db.driver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
-import org.apache.calcite.sql.SqlAggFunction;
-import org.apache.calcite.sql.SqlBasicCall;
-import org.apache.calcite.sql.SqlDialect;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.SqlSelect;
+import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
+import java.sql.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public abstract class AbstractDriver implements DbDriver {
 
-	private final SqlDialect dialect;
+  protected static final String PART_COLUMN_NAME = "_partition";
 
-	public AbstractDriver(SqlDialect dialect) {
-		this.dialect = dialect;
-	}
+  protected static final SqlNode PART_COLUMN =
+      SqlUtils.createColumn(PART_COLUMN_NAME, SqlTypeName.INTEGER, 8, 0);
 
-	@Override
-	public String toSql(SqlNode node) {
-		return node.toSqlString(dialect).getSql();
-	}
+  private final SqlDialect dialect;
 
-	@Override
-	public SqlTypeName toSqlType(int jdbcType) {
-		return null;
-	}
+  protected final int partitionSize;
 
-	@Override
-	public void prepareTable(Connection connection, String table, MetaData metaData) {
-		final List<Partition> partitions = split(connection, table);
-		final List<Column> columns = getColumns(connection, table);
+  public AbstractDriver(SqlDialect dialect, int partitionSize) {
+    this.dialect = dialect;
+    this.partitionSize = partitionSize;
+  }
 
-		metaData.add(partitions, columns);
-	}
+  @Override
+  public String toSql(SqlNode node) {
+    return node.toSqlString(dialect).getSql();
+  }
 
-	protected abstract List<Partition> split(Connection connection, String table);
+  @Override
+  public SqlTypeName toSqlType(int jdbcType) {
+    return null;
+  }
 
-	private List<Column> getColumns(Connection connection, String table) {
-		final List<String> columnNames = getColumnNames(connection, table);
+  @Override
+  public void prepareTable(Connection connection, String table, MetaData metaData) {
+    final List<Partition> partitions = split(connection, table);
+    final List<Column> columns = getColumns(connection, table);
 
-		try (PreparedStatement statement = connection.prepareStatement(getSelectMinMax(table, columnNames))) {
-			try (ResultSet result = statement.executeQuery()) {
-				final List<Column> columns = new ArrayList<>();
+    metaData.add(partitions, columns);
+  }
 
-				result.next();
+  protected abstract List<Partition> split(Connection connection, String table);
 
-				for (int i = 0; i < columnNames.size(); i++) {
-					final Column column = new Column();
-					final int pos = i * 2 + 1;
+  private List<Column> getColumns(Connection connection, String table) {
+    final List<String> columnNames = getColumnNames(connection, table);
 
-					column.setTable(table);
-					column.setName(columnNames.get(i));
-					column.setMin(result.getLong(pos));
-					column.setMax(result.getLong(pos + 1));
-					columns.add(column);
-				}
+    try (PreparedStatement statement =
+        connection.prepareStatement(getSelectMinMax(table, columnNames))) {
+      try (ResultSet result = statement.executeQuery()) {
+        final List<Column> columns = new ArrayList<>();
 
-				return columns;
-			}
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+        result.next();
 
-	private String getSelectMinMax(String table, List<String> columnNames) {
-		final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
-		for (String columnName : columnNames) {
-			selectList.add(createAggregator(SqlStdOperatorTable.MIN, columnName));
-			selectList.add(createAggregator(SqlStdOperatorTable.MAX, columnName));
-		}
+        for (int i = 0; i < columnNames.size(); i++) {
+          final Column column = new Column();
+          final int pos = i * 2 + 1;
 
-		return getSelect(selectList, table);
-	}
+          column.setTable(table);
+          column.setName(columnNames.get(i));
+          column.setMin(result.getLong(pos));
+          column.setMax(result.getLong(pos + 1));
+          columns.add(column);
+        }
 
-	private SqlBasicCall createAggregator(SqlAggFunction func, String columnName) {
-		return new SqlBasicCall(
-				func,
-				new SqlNode[]{new SqlIdentifier(columnName, SqlParserPos.ZERO)},
-				SqlParserPos.ZERO
-		);
-	}
+        return columns;
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-	private List<String> getColumnNames(Connection connection, String table) {
-		try (PreparedStatement statement = connection.prepareStatement(getSelectAll(table))) {
-			final List<String> columnNames = new ArrayList<>();
-			final ResultSetMetaData metaData = statement.getMetaData();
+  private String getSelectMinMax(String table, List<String> columnNames) {
+    final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+    for (String columnName : columnNames) {
+      selectList.add(createAggregator(SqlStdOperatorTable.MIN, columnName));
+      selectList.add(createAggregator(SqlStdOperatorTable.MAX, columnName));
+    }
 
-			for (int i = 1; i <= metaData.getColumnCount(); i++) {
-				switch (metaData.getColumnType(i)) {
-					case Types.SMALLINT:
-					case Types.INTEGER:
-					case Types.BIGINT:
-						columnNames.add(metaData.getColumnName(i));
-				}
-			}
+    return getSelect(selectList, table);
+  }
 
-			return columnNames;
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  private SqlBasicCall createAggregator(SqlAggFunction func, String columnName) {
+    return new SqlBasicCall(
+        func, new SqlNode[] {new SqlIdentifier(columnName, SqlParserPos.ZERO)}, SqlParserPos.ZERO);
+  }
 
-	protected final long getCount(Connection connection, String table) {
-		try (Statement statement = connection.createStatement()) {
-			try (ResultSet result = statement.executeQuery(getSelectCount(table))) {
-				result.next();
-				return result.getLong(1);
-			}
-		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
-		}
-	}
+  private List<String> getColumnNames(Connection connection, String table) {
+    try (PreparedStatement statement = connection.prepareStatement(getSelectAll(table))) {
+      final List<String> columnNames = new ArrayList<>();
+      final ResultSetMetaData metaData = statement.getMetaData();
 
-	protected final String getSelectAll(String table) {
-		final SqlNode selectAll = new SqlIdentifier("*", SqlParserPos.ZERO);
-		return getSelect(selectAll, table);
-	}
+      for (int i = 1; i <= metaData.getColumnCount(); i++) {
+        switch (metaData.getColumnType(i)) {
+          case Types.SMALLINT:
+          case Types.INTEGER:
+          case Types.BIGINT:
+            columnNames.add(metaData.getColumnName(i));
+        }
+      }
 
-	protected final String getSelectCount(String table) {
-		final SqlNode selectCount = createAggregator(SqlStdOperatorTable.COUNT, "*");
-		return getSelect(selectCount, table);
-	}
+      return columnNames;
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
 
-	private String getSelect(SqlNode singleSelect, String table) {
-		return getSelect(new SqlNodeList(Collections.singleton(singleSelect), SqlParserPos.ZERO), table);
-	}
+  protected final long getCount(Connection connection, String table) {
+    return getCountSql(connection, getSelectCount(table, null));
+  }
 
-	private String getSelect(SqlNodeList selectList, String table) {
-		return toSql(new SqlSelect(
-				SqlParserPos.ZERO,
-				new SqlNodeList(SqlParserPos.ZERO),
-				selectList,
-				new SqlIdentifier(table, SqlParserPos.ZERO),
-				null,
-				null,
-				null,
-				null,
-				new SqlNodeList(SqlParserPos.ZERO),
-				null,
-				null
-		));
-	}
+  protected final long getCount(
+      Connection connection, String table, int partition, String partitionColumn) {
+    final SqlNode where =
+        new SqlBasicCall(
+            SqlStdOperatorTable.EQUALS,
+            new SqlNode[] {
+              SqlUtils.getIdentifier(partitionColumn),
+              SqlLiteral.createExactNumeric(String.valueOf(partition), SqlParserPos.ZERO)
+            },
+            SqlParserPos.ZERO);
+
+    return getCountSql(connection, getSelectCount(table, where));
+  }
+
+  private long getCountSql(Connection connection, String sql) {
+    try (Statement statement = connection.createStatement()) {
+      try (ResultSet result = statement.executeQuery(sql)) {
+        result.next();
+        return result.getLong(1);
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
+
+  protected final String getSelectAll(String table) {
+    final SqlNode selectAll = new SqlIdentifier("*", SqlParserPos.ZERO);
+    return getSelect(selectAll, table);
+  }
+
+  protected final String getSelectCount(String table, SqlNode where) {
+    final SqlNode selectCount = createAggregator(SqlStdOperatorTable.COUNT, "*");
+    return getSelect(SqlNodeList.of(selectCount), table, where);
+  }
+
+  private String getSelect(SqlNode singleSelect, String table) {
+    return getSelect(SqlNodeList.of(singleSelect), table);
+  }
+
+  private String getSelect(SqlNodeList selectList, String table) {
+    return getSelect(selectList, table, null);
+  }
+
+  private String getSelect(SqlNodeList selectList, String table, SqlNode where) {
+    return toSql(
+        new SqlSelect(
+            SqlParserPos.ZERO,
+            new SqlNodeList(SqlParserPos.ZERO),
+            selectList,
+            new SqlIdentifier(table, SqlParserPos.ZERO),
+            where,
+            null,
+            null,
+            null,
+            new SqlNodeList(SqlParserPos.ZERO),
+            null,
+            null));
+  }
 }

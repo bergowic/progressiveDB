@@ -18,10 +18,13 @@
         <slf4j.version>1.7.25</slf4j.version>
         <junit.version>5.1.0</junit.version>
         <sql2o.version>1.6.0</sql2o.version>
-        <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
-        <postgresql.version>42.2.5</postgresql.version>
         <commons-configuration2.version>2.4</commons-configuration2.version>
         <commons-beanutils.version>1.9.3</commons-beanutils.version>
+
+        <!-- jdbc -->
+        <sqlite-jdbc.version>3.25.2</sqlite-jdbc.version>
+        <postgresql.version>42.2.5</postgresql.version>
+        <mysql.version>8.0.15</mysql.version>
 
         <!-- maven plugins -->
         <maven-compiler-plugin.version>3.8.0</maven-compiler-plugin.version>
@@ -86,6 +89,13 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
             <version>${postgresql.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>${mysql.version}</version>
             <scope>test</scope>
         </dependency>
 

@@ -2,7 +2,7 @@ package de.tuda.progressive.db.buffer.impl;
 
 import de.tuda.progressive.db.Utils;
 import de.tuda.progressive.db.driver.DbDriver;
-import de.tuda.progressive.db.driver.SqliteDriver;
+import de.tuda.progressive.db.driver.SQLiteDriver;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import org.apache.calcite.sql.parser.SqlParseException;
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class JdbcDataBufferTest {
 
-  private static final DbDriver driver = SqliteDriver.INSTANCE;
+  private static final DbDriver driver = SQLiteDriver.INSTANCE;
 
   private static Connection connection;
 
