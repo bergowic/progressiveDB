@@ -25,7 +25,6 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 public class SqlUtils {
@@ -189,11 +188,11 @@ public class SqlUtils {
 
   public static void setMetaFields(
       PreparedStatement statement,
-      Function2<MetaField, Boolean, Optional<Integer>> posFunction,
+      Function2<MetaField, Boolean, List<Integer>> posFunction,
       Map<MetaField, Object> values) {
     posFunction
         .apply(MetaField.PARTITION, true)
-        .ifPresent(
+        .forEach(
             SqlUtils.consumer(
                 pos -> {
                   statement.setInt(pos + 1, (int) values.get(MetaField.PARTITION));
@@ -201,7 +200,7 @@ public class SqlUtils {
 
     posFunction
         .apply(MetaField.PROGRESS, true)
-        .ifPresent(
+        .forEach(
             SqlUtils.consumer(
                 pos -> {
                   statement.setDouble(pos + 1, (double) values.get(MetaField.PROGRESS));

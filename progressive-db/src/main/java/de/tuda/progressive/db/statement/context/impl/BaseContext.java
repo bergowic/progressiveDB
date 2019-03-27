@@ -3,9 +3,9 @@ package de.tuda.progressive.db.statement.context.impl;
 import de.tuda.progressive.db.statement.context.MetaField;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public abstract class BaseContext {
 
@@ -18,15 +18,16 @@ public abstract class BaseContext {
     this.bounds = bounds;
   }
 
-  public Optional<Integer> getFunctionMetaFieldPos(MetaField metaField, boolean substitute) {
+  public List<Integer> getFunctionMetaFieldPos(MetaField metaField, boolean substitute) {
     if (!metaField.isFunction()) {
       throw new IllegalArgumentException("metaField must be a function");
     }
 
+    List<Integer> positions = new ArrayList<>();
     int pos = 0;
     for (MetaField m : metaFields) {
       if (m == metaField) {
-        return Optional.of(pos);
+        positions.add(pos);
       }
 
       if (!substitute || m.isSubstitute()) {
@@ -34,7 +35,7 @@ public abstract class BaseContext {
       }
     }
 
-    return Optional.empty();
+    return positions;
   }
 
   public List<MetaField> getMetaFields() {

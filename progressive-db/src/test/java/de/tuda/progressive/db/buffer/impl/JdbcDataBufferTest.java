@@ -220,6 +220,27 @@ class JdbcDataBufferTest {
             Arrays.asList(new Object[] {1, "a", "a"}, new Object[] {1, "b", "b"})));
   }
 
+  @Test
+  void testMultipleMeta() throws Throwable {
+    final JdbcSelectContext context =
+        builder()
+            .metaFields(
+                Arrays.asList(
+                    MetaField.PARTITION,
+                    MetaField.PARTITION,
+                    MetaField.PROGRESS,
+                    MetaField.PROGRESS,
+                    MetaField.NONE))
+            .selectBuffer(parse("select ?, ?, ?, ?, c from b"))
+            .build();
+
+    test(
+        context,
+        Arrays.asList(
+            Arrays.asList(new Object[] {0, 0, 0.5, 0.5, "a"}, new Object[] {0, 0, 0.5, 0.5, "b"}),
+            Arrays.asList(new Object[] {1, 1, 1.0, 1.0, "a"}, new Object[] {1, 1, 1.0, 1.0, "b"})));
+  }
+
   void test() throws Throwable {
     final JdbcSelectContext context =
         builder()
