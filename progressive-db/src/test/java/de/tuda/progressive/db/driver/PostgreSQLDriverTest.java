@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeAll;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-class PostgreSQLDriverTest extends AbstractDriverTest {
+class PostgreSQLDriverTest extends PartitionDriverTest {
   private static final String URL = "jdbc:postgresql://localhost:5432/progressive";
   private static final String USER = "postgres";
   private static final String PASSWORD = "postgres";
@@ -16,7 +16,7 @@ class PostgreSQLDriverTest extends AbstractDriverTest {
   }
 
   @Override
-  protected AbstractDriver getDriver(int partitionSize) {
-    return new PostgreSQLDriver(partitionSize);
+  protected PartitionDriver.Builder getDriver() {
+    return new PostgreSQLDriver.Builder();
   }
 }

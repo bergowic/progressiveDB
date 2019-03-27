@@ -5,7 +5,7 @@ import org.junit.jupiter.api.BeforeAll;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 
-class MySQLDriverTest extends AbstractDriverTest {
+class MySQLDriverTest extends PartitionDriverTest {
   private static final String URL = "jdbc:mysql://localhost:3306/progressive";
   private static final String USER = "root";
   private static final String PASSWORD = "";
@@ -16,7 +16,7 @@ class MySQLDriverTest extends AbstractDriverTest {
   }
 
   @Override
-  protected AbstractDriver getDriver(int partitionSize) {
-    return new MySQLDriver(partitionSize);
+  protected PartitionDriver.Builder getDriver() {
+    return new MySQLDriver.Builder();
   }
 }

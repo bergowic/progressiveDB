@@ -70,6 +70,19 @@ public class SqlUtils {
         null);
   }
 
+  public static SqlNodeList getColumns(ResultSetMetaData metaData) {
+    final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
+    try {
+      for (int i = 1; i <= metaData.getColumnCount(); i++) {
+        columns.add(getColumnIdentifier(metaData, i));
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+    return columns;
+  }
+
   private static SqlNode getColumnOfType(
       DbDriver driver, String name, int type, int precision, int scale) {
     SqlTypeName sqlType;

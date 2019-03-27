@@ -1,54 +1,77 @@
 package de.tuda.progressive.db.driver;
 
-import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlDialect;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.ArrayList;
-import java.util.List;
 
 public abstract class PartitionDriver extends AbstractDriver {
 
-  private static final Logger log = LoggerFactory.getLogger(PartitionDriver.class);
+  protected static final String PART_COLUMN_NAME = "_partition";
 
-  public PartitionDriver(SqlDialect dialect, int partitionSize) {
-    super(dialect, partitionSize);
+  protected static final SqlNode PART_COLUMN =
+      SqlUtils.createColumn(PART_COLUMN_NAME, SqlTypeName.INTEGER, 8, 0);
+
+  private static final String INSERT_ALL_TPL = "insert into %s %s";
+
+  private boolean hasPartitions;
+
+  @Override
+  protected void createPartitions(Connection connection, String table, int partitions) {
+    if (hasPartitions()) {
+      dropTable(connection, getPartitionTable(table));
+      createPartitionTable(connection, table, partitions);
+    } else {
+      super.createPartitions(connection, table, partitions);
+    }
+  }
+
+  protected abstract void createPartitionTable(Connection connection, String table, int partitions);
+
+  @Override
+  protected long getPartitionEntries(Connection connection, String table, int partition) {
+    if (hasPartitions()) {
+      return getCount(connection, getPartitionTable(table), partition);
+    } else {
+      return super.getPartitionEntries(connection, table, partition);
+    }
+  }
+
+  private long getCount(Connection connection, String table, int partition) {
+    final SqlNode where =
+        new SqlBasicCall(
+            SqlStdOperatorTable.EQUALS,
+            new SqlNode[] {
+              SqlUtils.getIdentifier(PART_COLUMN_NAME),
+              SqlLiteral.createExactNumeric(String.valueOf(partition), SqlParserPos.ZERO)
+            },
+            SqlParserPos.ZERO);
+
+    return getCount(connection, table, where);
   }
 
   @Override
-  protected List<Partition> split(Connection connection, String table) {
-    final String partitionTable = getPartitionTable(table);
-    log.info("get count of partitions of table {} with size {}", table, partitionSize);
-    final int partitionCount = getPartitionCount(connection, table, partitionSize);
-    log.info("create {} partitions", partitionCount);
-
-    dropPartitionTable(connection, partitionTable);
-    createPartitions(connection, table, partitionCount);
-
-    log.info("insert data");
-    insertData(connection, table, partitionCount);
-
-    log.info("read meta data");
-    return getPartitions(connection, table, partitionCount);
+  protected void insertData(Connection connection, String table, int partitions) {
+    if (hasPartitions()) {
+      final String template = String.format(getSelectTemplate(), partitions, table);
+      insertData(connection, template, getPartitionTable(table));
+    } else {
+      super.insertData(connection, table, partitions);
+    }
   }
 
-  protected int getPartitionCount(Connection connection, String table, int partitionSize) {
-    final long count = getCount(connection, table);
-    return (int) Math.ceil(((double) count / (double) partitionSize));
-  }
-
-  protected String getPartitionTable(String table, int id) {
-    return String.format("%s_%d", getPartitionTable(table), id);
-  }
-
-  protected void dropPartitionTable(Connection connection, String partitionTable) {
+  private void insertData(Connection connection, String template, String targetTable) {
     try (Statement statement = connection.createStatement()) {
-      final String sql = toSql(SqlUtils.dropTable(partitionTable));
+      final String sql = String.format(INSERT_ALL_TPL, targetTable, template);
+
       statement.execute(sql);
     } catch (SQLException e) {
       // TODO
@@ -56,32 +79,28 @@ public abstract class PartitionDriver extends AbstractDriver {
     }
   }
 
-  protected List<Partition> getPartitions(Connection connection, String table, int partitionCount) {
-    final List<Partition> partitions = new ArrayList<>();
-    for (int i = 0; i < partitionCount; i++) {
-      final String partitionName = getPartitionTable(table, i);
-      final Partition partition = new Partition();
-      partition.setSrcTable(table);
-      partition.setTableName(partitionName);
-      partition.setId(i);
-      partition.setEntries(getCount(connection, getPartitionTable(table), i, PART_COLUMN_NAME));
-      partitions.add(partition);
-    }
-    return partitions;
+  @Override
+  public boolean hasPartitions() {
+    return hasPartitions;
   }
 
-  protected abstract void createPartitions(Connection connection, String table, int partitions);
+  public abstract static class Builder<D extends PartitionDriver, B extends Builder<D, B>>
+      extends AbstractDriver.Builder<D, B> {
+    private boolean hasPartitions;
 
-  protected abstract void insertData(Connection connection, String table, int partitions);
+    public Builder(SqlDialect dialect) {
+      super(dialect);
+    }
 
-  protected void insertData(
-      String template, Connection connection, String srcTable, String destTable, int partitions) {
-    try (Statement statement = connection.createStatement()) {
-      final String sql = String.format(template, destTable, partitions, srcTable);
-      statement.execute(sql);
-    } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+    public B hasPartitions(boolean hasPartitions) {
+      this.hasPartitions = hasPartitions;
+      return (B) this;
+    }
+
+    @Override
+    protected D build(D driver) {
+      ((PartitionDriver) driver).hasPartitions = hasPartitions;
+      return super.build(driver);
     }
   }
 }

@@ -8,13 +8,15 @@ import java.sql.Connection;
 
 public interface DbDriver {
 
-	String toSql(SqlNode node);
+  String toSql(SqlNode node);
 
-	SqlTypeName toSqlType(int jdbcType);
+  SqlTypeName toSqlType(int jdbcType);
 
-	void prepareTable(Connection connection, String table, MetaData metaData);
+  void prepareTable(Connection connection, String table, MetaData metaData);
 
-	String getPartitionTable(String table);
+  String getPartitionTable(String table);
 
-	boolean hasUpsert();
+  boolean hasUpsert();
+
+  boolean hasPartitions();
 }

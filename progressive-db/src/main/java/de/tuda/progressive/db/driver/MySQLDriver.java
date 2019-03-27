@@ -21,24 +21,8 @@ public class MySQLDriver extends PartitionDriver {
       String.format("partition by list(%s) (%%s)", PART_COLUMN_NAME);
   private static final String PART_SINGLE_TPL = "partition %s values in (%d)";
 
-  private static final String INSERT_FROM_TPL =
-      "insert into %s select t.*, (@row_number := @row_number + 1) %% %d from %s t, (SELECT @row_number := 0) rn";
-
-  public MySQLDriver() {
-    this(SQL_DIALECT);
-  }
-
-  public MySQLDriver(SqlDialect dialect) {
-    super(dialect, PARTITION_SIZE);
-  }
-
-  public MySQLDriver(int partitionSize) {
-    this(SQL_DIALECT, partitionSize);
-  }
-
-  public MySQLDriver(SqlDialect dialect, int partitionSize) {
-    super(dialect, partitionSize);
-  }
+  private static final String SELECT_TPL =
+      "select t.*, ((@row_number := @row_number + 1) %% %d) row_number from %s t, (select @row_number := 0) rn";
 
   @Override
   public String getPartitionTable(String table) {
@@ -46,8 +30,8 @@ public class MySQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void createPartitions(Connection connection, String table, int partitions) {
-    try (PreparedStatement srcStatement = connection.prepareStatement(getSelectAll(table))) {
+  protected void createPartitionTable(Connection connection, String table, int partitions) {
+    try (PreparedStatement srcStatement = connection.prepareStatement(toSql(getSelectAll(table)))) {
       final ResultSetMetaData metaData = srcStatement.getMetaData();
       final SqlCreateTable createTable =
           SqlUtils.createTable(this, metaData, null, getPartitionTable(table), PART_COLUMN);
@@ -71,8 +55,8 @@ public class MySQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void insertData(Connection connection, String table, int partitions) {
-    insertData(INSERT_FROM_TPL, connection, table, getPartitionTable(table), partitions);
+  protected String getSelectTemplate() {
+    return SELECT_TPL;
   }
 
   @Override
@@ -80,11 +64,20 @@ public class MySQLDriver extends PartitionDriver {
     return true;
   }
 
-  public static void main(String[] args) throws Exception {
-    MySQLDriver driver = new MySQLDriver();
-    try (Connection connection =
-        DriverManager.getConnection("jdbc:mysql://localhost:3306/progressive", "root", "")) {
-      driver.split(connection, "_test");
+  public static class Builder extends PartitionDriver.Builder<MySQLDriver, Builder> {
+    public Builder() {
+      this(SQL_DIALECT);
+    }
+
+    public Builder(SqlDialect dialect) {
+      super(dialect);
+      partitionSize(PARTITION_SIZE);
+      hasPartitions(true);
+    }
+
+    @Override
+    public MySQLDriver build() {
+      return build(new MySQLDriver());
     }
   }
 }

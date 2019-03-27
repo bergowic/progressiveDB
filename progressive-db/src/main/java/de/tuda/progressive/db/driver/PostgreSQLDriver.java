@@ -35,24 +35,8 @@ public class PostgreSQLDriver extends PartitionDriver {
   private static final String PART_DEF = String.format("partition by list(%s)", PART_COLUMN_NAME);
 
   private static final String PARTITION_TPL = "create table %s partition of %s for values in (%d)";
-  private static final String INSERT_FROM_TPL =
-      "insert into %s select t.*, row_number() over() %% %d from %s t";
-
-  public PostgreSQLDriver() {
-    this(SQL_DIALECT, PARTITION_SIZE);
-  }
-
-  public PostgreSQLDriver(SqlDialect dialect) {
-    this(dialect, PARTITION_SIZE);
-  }
-
-  public PostgreSQLDriver(int partitionSize) {
-    this(SQL_DIALECT, partitionSize);
-  }
-
-  public PostgreSQLDriver(SqlDialect dialect, int partitionSize) {
-    super(dialect, partitionSize);
-  }
+  private static final String SELECT_TPL =
+      "select t.*, (row_number() over() %% %d) row_number from %s t";
 
   @Override
   public String getPartitionTable(String table) {
@@ -60,7 +44,7 @@ public class PostgreSQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void createPartitions(Connection connection, String table, int partitions) {
+  protected void createPartitionTable(Connection connection, String table, int partitions) {
     final String partitionTable = getPartitionTable(table);
 
     createPartitionTable(connection, table, partitionTable);
@@ -73,12 +57,13 @@ public class PostgreSQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void insertData(Connection connection, String table, int partitions) {
-    insertData(INSERT_FROM_TPL, connection, table, getPartitionTable(table), partitions);
+  protected String getSelectTemplate() {
+    return SELECT_TPL;
   }
 
   private void createPartitionTable(Connection connection, String srcTable, String destTable) {
-    try (PreparedStatement srcStatement = connection.prepareStatement(getSelectAll(srcTable))) {
+    try (PreparedStatement srcStatement =
+        connection.prepareStatement(toSql(getSelectAll(srcTable)))) {
       final ResultSetMetaData metaData = srcStatement.getMetaData();
       final SqlCreateTable createTable =
           SqlUtils.createTable(this, metaData, null, destTable, PART_COLUMN);
@@ -107,5 +92,22 @@ public class PostgreSQLDriver extends PartitionDriver {
   @Override
   public boolean hasUpsert() {
     return true;
+  }
+
+  public static class Builder extends PartitionDriver.Builder<PostgreSQLDriver, Builder> {
+    public Builder() {
+      this(SQL_DIALECT);
+    }
+
+    public Builder(SqlDialect dialect) {
+      super(dialect);
+      partitionSize(PARTITION_SIZE);
+      hasPartitions(true);
+    }
+
+    @Override
+    public PostgreSQLDriver build() {
+      return build(new PostgreSQLDriver());
+    }
   }
 }

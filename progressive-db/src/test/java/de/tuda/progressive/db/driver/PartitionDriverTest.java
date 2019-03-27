@@ -4,6 +4,8 @@ import de.tuda.progressive.db.meta.MemoryMetaData;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.ddl.SqlDropTable;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -16,16 +18,23 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-public abstract class AbstractDriverTest {
+public abstract class PartitionDriverTest {
 
   private static final String TABLE_NAME = "test";
 
   protected static Connection connection;
 
   @BeforeEach
-  void setUp() throws SQLException {
+  void beforeEach() throws SQLException {
+    final PartitionDriver driver = getDriver().build();
+
     try (Statement statement = connection.createStatement()) {
-      statement.execute(String.format("drop table if exists %s", TABLE_NAME));
+      for (int i = 0; i < 3; i++) {
+        SqlDropTable dropTable = SqlUtils.dropTable(driver.getPartitionTable(TABLE_NAME, i));
+        statement.execute(driver.toSql(dropTable));
+      }
+
+      statement.execute(driver.toSql(SqlUtils.dropTable(TABLE_NAME)));
       statement.execute(String.format("create table %s (a integer, b varchar(100))", TABLE_NAME));
       statement.execute(String.format("insert into %s values (1, 'a')", TABLE_NAME));
       statement.execute(String.format("insert into %s values (2, 'b')", TABLE_NAME));
@@ -34,24 +43,35 @@ public abstract class AbstractDriverTest {
   }
 
   @AfterAll
-  static void clean() throws SQLException {
+  static void afterAll() throws SQLException {
     if (connection != null) {
       connection.close();
     }
   }
 
-  protected abstract AbstractDriver getDriver(int partitionSize);
+  protected abstract PartitionDriver.Builder<
+          ? extends PartitionDriver, ? extends PartitionDriver.Builder>
+      getDriver();
 
   @Test
   void testGetCount() {
-    final AbstractDriver driver = getDriver(0);
+    final AbstractDriver driver = getDriver().build();
 
     assertEquals(3, driver.getCount(connection, TABLE_NAME));
   }
 
   @Test
   void testPrepare1() {
-    final DbDriver driver = getDriver(1);
+    testPrepare1(false);
+  }
+
+  @Test
+  void testPrepare1Partitions() {
+    testPrepare1(true);
+  }
+
+  private void testPrepare1(boolean hasPartitions) {
+    final DbDriver driver = getDriver().partitionSize(1).hasPartitions(hasPartitions).build();
 
     final MetaData metaData = new MemoryMetaData();
     driver.prepareTable(connection, TABLE_NAME, metaData);
@@ -66,7 +86,16 @@ public abstract class AbstractDriverTest {
 
   @Test
   void testPrepare2() {
-    final DbDriver driver = getDriver(2);
+    testPrepare2(false);
+  }
+
+  @Test
+  void testPrepare2Partitions() {
+    testPrepare2(true);
+  }
+
+  private void testPrepare2(boolean hasPartitions) {
+    final DbDriver driver = getDriver().partitionSize(2).hasPartitions(hasPartitions).build();
 
     final MetaData metaData = new MemoryMetaData();
     driver.prepareTable(connection, TABLE_NAME, metaData);
