@@ -79,8 +79,9 @@ public abstract class AbstractDriver implements DbDriver {
     }
   }
 
-  protected final String getPartitionTable(String table, int id) {
-    return String.format("%s_%d", getPartitionTable(table), id);
+  @Override
+  public String getPartitionTable(String table, int partition) {
+    return String.format("%s_%d", getPartitionTable(table), partition);
   }
 
   protected void insertData(Connection connection, String table, int partitions) {

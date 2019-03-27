@@ -183,8 +183,13 @@ public abstract class BaseContextFactory<
     }
 
     final SqlIdentifier oldFrom = (SqlIdentifier) select.getFrom();
-    final SqlIdentifier from =
-        SqlUtils.getIdentifier(sourceDriver.getPartitionTable(oldFrom.getSimple()));
+    SqlIdentifier from;
+    if (sourceDriver.hasPartitions()) {
+      from = SqlUtils.getIdentifier(sourceDriver.getPartitionTable(oldFrom.getSimple()));
+    } else {
+      from = oldFrom;
+    }
+
     final SqlBasicCall where = createWhere((SqlBasicCall) select.getWhere());
 
     return new SqlSelect(
@@ -234,6 +239,10 @@ public abstract class BaseContextFactory<
   }
 
   private SqlBasicCall createWhere(SqlBasicCall oldWhere) {
+    if (!sourceDriver.hasPartitions()) {
+      return oldWhere;
+    }
+
     final SqlBasicCall eqPartition = createWhereEqPartition();
     if (oldWhere == null) {
       return eqPartition;

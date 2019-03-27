@@ -5,6 +5,9 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +21,8 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
   private static final Logger log = LoggerFactory.getLogger(ProgressiveBaseStatement.class);
 
   private static final ExecutorService executor = Executors.newCachedThreadPool();
+
+  private final DbDriver driver;
 
   private final List<Partition> partitions;
 
@@ -33,18 +38,25 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
   private final Connection connection;
 
+  private final SqlSelect selectSource;
+
   public ProgressiveBaseStatement(
       DbDriver driver,
       Connection connection,
       JdbcSourceContext context,
       DataBuffer dataBuffer,
       List<Partition> partitions) {
+    this.driver = driver;
     this.dataBuffer = dataBuffer;
     this.partitions = partitions;
     this.connection = connection;
+    this.selectSource = context.getSelectSource();
 
     try {
-      preparedStatement = connection.prepareStatement(driver.toSql(context.getSelectSource()));
+      preparedStatement =
+          driver.hasPartitions()
+              ? connection.prepareStatement(driver.toSql(selectSource))
+              : null;
 
       metaData = dataBuffer.getMetaData();
     } catch (SQLException e) {
@@ -81,10 +93,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
   private void query(Partition partition) {
     log.info("query next partition: {}", partition.getId());
     try {
-      preparedStatement.setInt(1, partition.getId());
-      log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
-
-      ResultSet resultSet = preparedStatement.executeQuery();
+      ResultSet resultSet = getResult(partition);
 
       log.info("data received");
       dataBuffer.add(resultSet);
@@ -98,6 +107,27 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
     } catch (SQLException e) {
       // TODO
       throw new RuntimeException(e);
+    }
+  }
+
+  private ResultSet getResult(Partition partition) throws SQLException {
+    if (driver.hasPartitions()) {
+      preparedStatement.setInt(1, partition.getId());
+      log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
+
+      return preparedStatement.executeQuery();
+    } else {
+      final SqlIdentifier from = (SqlIdentifier) selectSource.getFrom();
+      final String table = driver.getPartitionTable(from.getSimple(), partition.getId());
+      final SqlSelect select = (SqlSelect) selectSource.clone(SqlParserPos.ZERO);
+      select.setFrom(SqlUtils.getIdentifier(table));
+
+      final String sql = driver.toSql(select);
+      log.info("next statement {}", sql.replaceAll("\\r\\n", " "));
+
+      try (Statement statement = connection.createStatement()) {
+        return statement.executeQuery(sql);
+      }
     }
   }
 

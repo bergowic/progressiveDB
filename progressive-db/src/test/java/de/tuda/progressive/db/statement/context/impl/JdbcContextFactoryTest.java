@@ -8,8 +8,10 @@ import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcContextFactory;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.parser.SqlParser;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.jupiter.api.*;
 
 import java.sql.*;
@@ -39,14 +41,15 @@ class JdbcContextFactoryTest {
     config = SqlParser.configBuilder().setParserFactory(SqlParserImpl.FACTORY).build();
 
     try (Statement statement = sourceConnection.createStatement()) {
-      statement.execute("drop table if exists t");
-      statement.execute(
-          "create table t (a integer, b integer, c varchar(100), _partition integer)");
-      statement.execute("insert into t values (1, 2, 'a', 0)");
-      statement.execute("insert into t values (3, 4, 'b', 0)");
-      statement.execute("insert into t values (5, 6, 'a', 1)");
-      statement.execute("insert into t values (7, 8, 'b', 1)");
-      statement.execute("insert into t values (9, 10, 'c', 1)");
+      statement.execute(driver.toSql(SqlUtils.dropTable("t")));
+      statement.execute("create table t (a integer, b integer, c varchar(100))");
+      statement.execute("create table t_0 (a integer, b integer, c varchar(100))");
+      statement.execute("create table t_1 (a integer, b integer, c varchar(100))");
+      statement.execute("insert into t_0 values (1, 2, 'a')");
+      statement.execute("insert into t_0 values (3, 4, 'b')");
+      statement.execute("insert into t_1 values (5, 6, 'a')");
+      statement.execute("insert into t_1 values (7, 8, 'b')");
+      statement.execute("insert into t_1 values (9, 10, 'c')");
     }
   }
 
@@ -83,9 +86,7 @@ class JdbcContextFactoryTest {
     try (Statement statement = bufferConnection.createStatement()) {
       statement.execute(driver.toSql(context.getCreateBuffer()));
 
-      final String selectSource = driver.toSql(context.getSelectSource());
-      try (PreparedStatement sourceSelectStatement =
-          sourceConnection.prepareStatement(selectSource)) {
+      try (Statement sourceSelectStatement = sourceConnection.createStatement()) {
         final String updateBuffer =
             context.getUpdateBuffer() == null ? null : driver.toSql(context.getUpdateBuffer());
 
@@ -100,8 +101,9 @@ class JdbcContextFactoryTest {
             try (PreparedStatement selectBufferStatement =
                 bufferConnection.prepareStatement(selectBuffer)) {
               for (int i = 0; i < expectedValues.size(); i++) {
-                sourceSelectStatement.setInt(1, i);
-                try (ResultSet result = sourceSelectStatement.executeQuery()) {
+                try (ResultSet result =
+                    sourceSelectStatement.executeQuery(
+                        getSelectSource(context.getSelectSource(), i))) {
                   while (result.next()) {
                     final int columnCount = result.getMetaData().getColumnCount();
 
@@ -168,6 +170,14 @@ class JdbcContextFactoryTest {
         }
       }
     }
+  }
+
+  private String getSelectSource(SqlSelect selectSource, int partition) {
+    final SqlSelect select = (SqlSelect) selectSource.clone(SqlParserPos.ZERO);
+    final SqlIdentifier from = (SqlIdentifier) select.getFrom();
+    select.setFrom(SqlUtils.getIdentifier(driver.getPartitionTable(from.getSimple(), partition)));
+
+    return driver.toSql(select);
   }
 
   private Object[] valuesRow(Object... values) {
