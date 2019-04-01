@@ -8,6 +8,7 @@ import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
@@ -53,7 +54,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
   }
 
   @Override
-  public ProgressiveStatement prepare(Connection connection, SqlSelect select) {
+  public ProgressiveStatement prepare(Connection connection, SqlSelectProgressive select) {
     log.info("prepare select: {}", select);
     assertValid(select);
 

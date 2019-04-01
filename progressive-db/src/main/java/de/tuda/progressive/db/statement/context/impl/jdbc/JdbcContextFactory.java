@@ -5,6 +5,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureNode;
+import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.sql.parser.SqlUpsert;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
@@ -16,6 +17,7 @@ import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
+import org.apache.calcite.util.Litmus;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -30,6 +32,8 @@ import java.util.stream.IntStream;
 
 public class JdbcContextFactory
     extends BaseContextFactory<JdbcSelectContext, JdbcSourceContext, JdbcDataBuffer> {
+
+  private static final SqlNodeList STAR = SqlNodeList.of(SqlIdentifier.star(SqlParserPos.ZERO));
 
   private final DbDriver bufferDriver;
 
@@ -46,7 +50,7 @@ public class JdbcContextFactory
   @Override
   protected JdbcSelectContext create(
       Connection connection,
-      SqlSelect select,
+      SqlSelectProgressive select,
       Function<Pair<String, String>, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource) {
@@ -81,7 +85,7 @@ public class JdbcContextFactory
   @Override
   public JdbcSourceContext create(
       JdbcDataBuffer dataBuffer,
-      SqlSelect select,
+      SqlSelectProgressive select,
       Function<Pair<String, String>, Column> columnMapper) {
     final JdbcSelectContext context = dataBuffer.getContext();
     final Pair<SqlSelect, List<Integer>> transformed = transformSelect(context, select);
@@ -119,7 +123,6 @@ public class JdbcContextFactory
       final String bufferTableName = view.getName().getSimple();
       final SqlCreateTable createBuffer =
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
-      // TODO use correct select
       final SqlSelect selectBuffer =
           getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields);
 
@@ -193,26 +196,39 @@ public class JdbcContextFactory
   }
 
   private Pair<SqlSelect, List<Integer>> transformSelect(
-      JdbcBufferContext context, SqlSelect select) {
-    final SqlNodeList selectList = SqlNodeList.clone(select.getSelectList());
-    final List<Integer> indices =
-        substituteFields(context::getFieldIndex, context.getMetaFields(), selectList);
-    final SqlNodeList groups = getIndexColumns(context.getMetaFields(), indices);
+      JdbcBufferContext context, SqlSelectProgressive select) {
+    if (STAR.equalsDeep(select.getSelectList(), Litmus.IGNORE)) {
+      final List<Integer> indices = new ArrayList<>();
 
-    return ImmutablePair.of(
-        new SqlSelect(
-            SqlParserPos.ZERO,
-            null,
-            selectList,
-            select.getFrom(),
-            select.getWhere(),
-            groups.size() > 0 ? groups : null,
-            select.getHaving(),
-            select.getWindowList(),
-            select.getOrderList(),
-            select.getOffset(),
-            select.getFetch()),
-        indices);
+      final List<MetaField> metaFields = context.getMetaFields();
+      for (int i = 0; i < metaFields.size(); i++) {
+        if (metaFields.get(i) != MetaField.FUTURE) {
+          indices.add(i);
+        }
+      }
+
+      return ImmutablePair.of(context.getSelectBuffer(), indices);
+    } else {
+      final SqlNodeList selectList = SqlNodeList.clone(select.getSelectList());
+      final List<Integer> indices =
+          substituteFields(context::getFieldIndex, context.getMetaFields(), selectList);
+      final SqlNodeList groups = getIndexColumns(context.getMetaFields(), indices);
+
+      return ImmutablePair.of(
+          new SqlSelect(
+              SqlParserPos.ZERO,
+              null,
+              selectList,
+              select.getFrom(),
+              select.getWhere(),
+              groups.size() > 0 ? groups : null,
+              select.getHaving(),
+              select.getWindowList(),
+              select.getOrderList(),
+              select.getOffset(),
+              select.getFetch()),
+          indices);
+    }
   }
 
   private List<Integer> substituteFields(
@@ -394,6 +410,7 @@ public class JdbcContextFactory
       List<String> fieldNames,
       List<MetaField> metaFields) {
     final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+    final SqlNodeList groupBy = new SqlNodeList(SqlParserPos.ZERO);
 
     int i = 0;
     int index = 0;
@@ -405,7 +422,9 @@ public class JdbcContextFactory
 
       switch (metaField) {
         case NONE:
-          newColumn = SqlUtils.getIdentifier(bufferFieldNames.get(i++));
+          final SqlIdentifier identifier = SqlUtils.getIdentifier(bufferFieldNames.get(i++));
+          newColumn = identifier;
+          groupBy.add(identifier);
           break;
         case AVG:
           newColumn =
@@ -427,7 +446,8 @@ public class JdbcContextFactory
           newColumn = SqlUtils.createFunctionMetaField(index++, SqlTypeName.FLOAT);
           break;
         case FUTURE:
-          // TODO remove
+          // ignore
+          i++;
           break;
         case CONFIDENCE_INTERVAL:
           newColumn =
@@ -449,77 +469,7 @@ public class JdbcContextFactory
         selectList,
         new SqlIdentifier(bufferTableName, SqlParserPos.ZERO),
         null,
-        null,
-        null,
-        null,
-        null,
-        null,
-        null);
-  }
-
-  private SqlSelect getSelectBufferForView(
-      ResultSetMetaData metaData,
-      String bufferTableName,
-      List<SqlIdentifier> columnAliases,
-      List<MetaField> metaFields) {
-    final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
-
-    int i = 0;
-    int index = 0;
-    for (int j = 0; j < columnAliases.size(); j++) {
-      final SqlIdentifier alias = columnAliases.get(j);
-      final MetaField metaField = metaFields.get(j);
-
-      SqlNode newColumn;
-
-      switch (metaField) {
-        case NONE:
-          newColumn = SqlUtils.getColumnIdentifier(metaData, i + 1);
-          i++;
-          break;
-        case AVG:
-          newColumn =
-              SqlUtils.createAvgAggregation(
-                  SqlUtils.getColumnIdentifier(metaData, i + 1),
-                  SqlUtils.getColumnIdentifier(metaData, i + 2));
-          i += 2;
-          break;
-        case COUNT:
-          newColumn =
-              SqlUtils.createPercentAggregation(
-                  index, SqlUtils.getColumnIdentifier(metaData, i + 1));
-          i++;
-          index++;
-          break;
-        case SUM:
-          newColumn =
-              SqlUtils.createPercentAggregation(
-                  index, SqlUtils.getColumnIdentifier(metaData, i + 1));
-          i++;
-          index++;
-          break;
-        case PARTITION:
-          newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.INTEGER);
-          index++;
-          break;
-        case PROGRESS:
-          newColumn = SqlUtils.createFunctionMetaField(index, SqlTypeName.FLOAT);
-          index++;
-          break;
-        default:
-          throw new IllegalArgumentException("metaField not handled: " + metaField);
-      }
-
-      selectList.add(alias == null ? newColumn : SqlUtils.getAlias(newColumn, alias));
-    }
-
-    return new SqlSelect(
-        SqlParserPos.ZERO,
-        null,
-        selectList,
-        new SqlIdentifier(bufferTableName, SqlParserPos.ZERO),
-        null,
-        null,
+        groupBy.size() == 0 ? null : groupBy,
         null,
         null,
         null,
@@ -547,8 +497,7 @@ public class JdbcContextFactory
   }
 
   private JdbcSelectContext.Builder builder(
-      List<String> bufferFieldNames, String bufferTableName, SqlNodeList indexColumns)
-      throws SQLException {
+      List<String> bufferFieldNames, String bufferTableName, SqlNodeList indexColumns) {
     return new JdbcSelectContext.Builder()
         .insertBuffer(getInsertBuffer(bufferFieldNames, bufferTableName, indexColumns))
         .updateBuffer(getUpdateBuffer(bufferFieldNames, bufferTableName, indexColumns));

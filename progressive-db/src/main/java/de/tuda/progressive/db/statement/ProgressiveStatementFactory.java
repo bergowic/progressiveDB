@@ -1,13 +1,14 @@
 package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
-import org.apache.calcite.sql.SqlSelect;
+import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 
 import java.sql.Connection;
 
 public interface ProgressiveStatementFactory {
 
-	ProgressiveStatement prepare(Connection connection, SqlSelect select);
+  ProgressiveStatement prepare(Connection connection, SqlSelectProgressive select);
 
-	ProgressiveStatement prepare(Connection connection, SqlCreateProgressiveView createProgressiveView);
+  ProgressiveStatement prepare(
+      Connection connection, SqlCreateProgressiveView createProgressiveView);
 }

@@ -5,6 +5,7 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureNode;
+import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.ContextFactory;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.util.SqlUtils;
@@ -33,7 +34,7 @@ public abstract class BaseContextFactory<
   @Override
   public C1 create(
       Connection connection,
-      SqlSelect select,
+      SqlSelectProgressive select,
       Function<Pair<String, String>, Column> columnMapper) {
     final List<MetaField> metaFields = getMetaFields(select.getSelectList());
     final SqlSelect selectSource = transformSelect(select, metaFields);
@@ -56,7 +57,7 @@ public abstract class BaseContextFactory<
 
   protected abstract C1 create(
       Connection connection,
-      SqlSelect select,
+      SqlSelectProgressive select,
       Function<Pair<String, String>, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource);
@@ -72,21 +73,6 @@ public abstract class BaseContextFactory<
     return StreamSupport.stream(columns.spliterator(), false)
         .map(func)
         .collect(Collectors.toList());
-  }
-
-  protected List<SqlIdentifier> getColumnAliases(SqlNodeList columns) {
-    return get(columns, this::columnToAlias);
-  }
-
-  private SqlIdentifier columnToAlias(SqlNode column) {
-    if (!(column instanceof SqlBasicCall)) {
-      return null;
-    }
-    final SqlBasicCall call = (SqlBasicCall) column;
-    if (call.getKind() != SqlKind.AS) {
-      return null;
-    }
-    return (SqlIdentifier) call.operand(1);
   }
 
   protected final List<MetaField> getMetaFields(List<MetaField> metaFields, List<Integer> indices) {
