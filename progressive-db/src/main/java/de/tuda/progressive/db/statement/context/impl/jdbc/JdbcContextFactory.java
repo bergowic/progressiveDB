@@ -19,7 +19,9 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Litmus;
 import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.tuple.Triple;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -212,7 +214,12 @@ public class JdbcContextFactory
       final SqlNodeList selectList = SqlNodeList.clone(select.getSelectList());
       final List<Integer> indices =
           substituteFields(context::getFieldIndex, context.getMetaFields(), selectList);
-      final SqlNodeList groups = getIndexColumns(context.getMetaFields(), indices);
+      final SqlNodeList groups =
+          getGroupsByFuture(
+              context::getFieldIndex,
+              context.getMetaFields(),
+              select.getWithFutureGroupBy(),
+              select.getGroup());
 
       return ImmutablePair.of(
           new SqlSelect(
@@ -220,15 +227,97 @@ public class JdbcContextFactory
               null,
               selectList,
               select.getFrom(),
-              select.getWhere(),
+              replaceFieldNames(context::getFieldIndex, select.getWhere(), context.getMetaFields()),
               groups.size() > 0 ? groups : null,
-              select.getHaving(),
-              select.getWindowList(),
+              null,
+              null,
               select.getOrderList(),
               select.getOffset(),
               select.getFetch()),
           indices);
     }
+  }
+
+  private SqlNodeList getGroupsByFuture(
+      Function<String, Integer> fieldMapper,
+      List<MetaField> metaFields,
+      SqlNodeList withFutureGroupBy,
+      SqlNodeList groupBy) {
+    final SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
+
+    if (withFutureGroupBy != null) {
+      for (SqlNode group : withFutureGroupBy) {
+        final Triple<String, Integer, MetaField> field =
+            getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE));
+
+        groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
+      }
+    }
+
+    if (groupBy != null) {
+      for (SqlNode group : groupBy) {
+        final Triple<String, Integer, MetaField> field =
+            getField(
+                fieldMapper, group, metaFields, EnumSet.complementOf(EnumSet.of(MetaField.FUTURE)));
+
+        groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
+      }
+    }
+
+    return groups;
+  }
+
+  private Triple<String, Integer, MetaField> getField(
+      Function<String, Integer> fieldMapper,
+      SqlNode node,
+      List<MetaField> metaFields,
+      EnumSet<MetaField> valid) {
+    if (!(node instanceof SqlIdentifier)) {
+      throw new IllegalArgumentException("field is not an identifier: " + node);
+    }
+
+    final String name = ((SqlIdentifier) node).getSimple();
+    final int index = fieldMapper.apply(name);
+    if (index < 0) {
+      throw new IllegalArgumentException("field not found: " + name);
+    }
+
+    final MetaField metaField = metaFields.get(index);
+    if (valid != null) {
+      if (!valid.contains(metaField)) {
+        throw new IllegalArgumentException(
+            "field is invalid: " + metaField + " - must be one of: " + valid);
+      }
+    }
+
+    return ImmutableTriple.of(name, index, metaField);
+  }
+
+  private SqlNode replaceFieldNames(
+      Function<String, Integer> fieldMapper, SqlNode node, List<MetaField> metaFields) {
+    if (node == null) {
+      return null;
+    }
+
+    if (node instanceof SqlNodeList) {
+      final SqlNodeList nodes = (SqlNodeList) node;
+      for (int i = 0; i < nodes.size(); i++) {
+        final Pair<SqlNode, List<Integer>> substituted =
+            substituteFields(
+                fieldMapper,
+                metaFields,
+                nodes.get(i),
+                true,
+                EnumSet.of(MetaField.NONE, MetaField.FUTURE));
+
+        nodes.set(i, substituted.getLeft());
+      }
+      return nodes;
+    }
+
+    return substituteFields(
+            fieldMapper, metaFields, node, true, EnumSet.of(MetaField.NONE, MetaField.FUTURE))
+        .getLeft();
   }
 
   private List<Integer> substituteFields(
@@ -237,7 +326,7 @@ public class JdbcContextFactory
 
     for (int i = 0; i < selectList.size(); i++) {
       final Pair<SqlNode, List<Integer>> substituted =
-          substituteFields(fieldMapper, metaFields, selectList.get(i), true);
+          substituteFields(fieldMapper, metaFields, selectList.get(i), true, null);
 
       selectList.set(i, substituted.getLeft());
       indices.addAll(substituted.getRight());
@@ -250,17 +339,17 @@ public class JdbcContextFactory
       Function<String, Integer> fieldMapper,
       List<MetaField> metaFields,
       SqlNode node,
-      boolean addAlias) {
+      boolean addAlias,
+      EnumSet<MetaField> valid) {
     final List<Integer> indices = new ArrayList<>();
 
     if (node instanceof SqlIdentifier) {
-      final String fieldName = ((SqlIdentifier) node).getSimple();
-      final int index = fieldMapper.apply(fieldName);
-      if (index < 0) {
-        throw new IllegalArgumentException("field not found: " + node);
-      }
+      final Triple<String, Integer, MetaField> field =
+          getField(fieldMapper, node, metaFields, valid);
+      final String fieldName = field.getLeft();
+      final int index = field.getMiddle();
+      final MetaField metaField = field.getRight();
 
-      final MetaField metaField = metaFields.get(index);
       switch (metaField) {
         case AVG:
           node =
@@ -301,13 +390,20 @@ public class JdbcContextFactory
 
       if (SqlStdOperatorTable.AS.equals(call.getOperator())) {
         final Pair<SqlNode, List<Integer>> substituted =
-            substituteFields(fieldMapper, metaFields, call.operand(0), false);
+            substituteFields(fieldMapper, metaFields, call.operand(0), false, valid);
 
         call.setOperand(0, substituted.getLeft());
         indices.addAll(substituted.getRight());
-      }
+      } else {
+        // TODO check if actually correct
+        final SqlNode[] operands = call.getOperands();
+        for (int i = 0; i < operands.length; i++) {
+          final Pair<SqlNode, List<Integer>> substituted =
+              substituteFields(fieldMapper, metaFields, call.operand(i), false, valid);
 
-      // TODO
+          call.setOperand(i, substituted.getLeft());
+        }
+      }
     }
 
     return ImmutablePair.of(node, indices);
