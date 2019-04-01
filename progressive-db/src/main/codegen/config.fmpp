@@ -35,6 +35,7 @@ data: {
     # Example: SqlShowDatabases(), SqlShowTables().
     statementParserMethods: [
       "SqlPrepareTable()"
+      "ProgressiveOrderedQueryOrExpr()"
     ]
 
     # List of methods for parsing custom literals.
