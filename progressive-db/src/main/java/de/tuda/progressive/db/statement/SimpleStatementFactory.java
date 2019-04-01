@@ -94,7 +94,8 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 
     final SqlIdentifier view = createProgressiveView.getName();
     final String viewName = view.getSimple().toUpperCase();
-    final JdbcSourceContext context = contextFactory.create(connection, createProgressiveView, columnMapper);
+    final JdbcSourceContext context =
+        contextFactory.create(connection, createProgressiveView, columnMapper);
 
     if (viewStatements.containsKey(viewName)) {
       throw new IllegalStateException("view already exists");

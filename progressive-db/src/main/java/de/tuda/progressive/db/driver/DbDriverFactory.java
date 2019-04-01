@@ -8,11 +8,11 @@ public class DbDriverFactory {
     final String driver = url.substring(PREFIX_LEN, url.indexOf(":", PREFIX_LEN));
     switch (driver.toUpperCase()) {
       case "POSTGRESQL":
-        return new PostgreSQLDriver();
+        return new PostgreSQLDriver.Builder().build();
       case "SQLITE":
-        return new SQLiteDriver();
+        return new SQLiteDriver.Builder().build();
       case "MYSQL":
-        return new MySQLDriver();
+        return new MySQLDriver.Builder().build();
     }
 
     throw new IllegalArgumentException("driver not supported: " + driver);

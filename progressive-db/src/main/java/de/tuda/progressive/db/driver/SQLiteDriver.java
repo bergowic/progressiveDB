@@ -14,6 +14,8 @@ public class SQLiteDriver extends AbstractDriver {
   public static final SqlDialect SQL_DIALECT =
       new AnsiSqlDialect(SqlDialect.EMPTY_CONTEXT.withIdentifierQuoteString("\""));
 
+  private SQLiteDriver() {}
+
   @Override
   public SqlTypeName toSqlType(int jdbcType) {
     switch (jdbcType) {

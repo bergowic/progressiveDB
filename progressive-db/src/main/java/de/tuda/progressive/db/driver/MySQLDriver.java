@@ -24,6 +24,8 @@ public class MySQLDriver extends PartitionDriver {
   private static final String SELECT_TPL =
       "select t.*, ((@row_number := @row_number + 1) %% %d) row_number from %s t, (select @row_number := 0) rn";
 
+  private MySQLDriver() {}
+
   @Override
   public String getPartitionTable(String table) {
     return table + PART_COLUMN_NAME;

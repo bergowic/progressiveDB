@@ -32,6 +32,8 @@ public class PostgreSQLDriver extends PartitionDriver {
     }
   }
 
+  private PostgreSQLDriver() {}
+
   private static final String PART_DEF = String.format("partition by list(%s)", PART_COLUMN_NAME);
 
   private static final String PARTITION_TPL = "create table %s partition of %s for values in (%d)";
