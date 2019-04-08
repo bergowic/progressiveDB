@@ -9,13 +9,24 @@ import java.util.Collections;
 
 public class SqlFutureNode extends SqlNodeList {
 
+  private final boolean hideParens;
+
   public SqlFutureNode(SqlNode node, SqlParserPos pos) {
+    this(node, true, pos);
+  }
+
+  public SqlFutureNode(SqlNode node, boolean hideParens, SqlParserPos pos) {
     super(Collections.singleton(node), pos);
+    this.hideParens = hideParens;
   }
 
   @Override
   public void unparse(SqlWriter writer, int leftPrec, int rightPrec) {
-    super.unparse(writer, 0, 0);
+    if (hideParens) {
+      super.unparse(writer, 0, 0);
+    } else {
+      super.unparse(writer, leftPrec, rightPrec);
+    }
     writer.keyword("FUTURE");
   }
 
