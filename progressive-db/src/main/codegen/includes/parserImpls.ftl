@@ -281,6 +281,7 @@ SqlSelectProgressive SqlSelectProgressive() :
     final SqlNodeList keywordList;
     List<SqlNode> selectList;
     final SqlNode fromClause;
+    final SqlNodeList withFutureWhere;
     final SqlNode where;
     final SqlNodeList withFutureGroupBy;
     final SqlNodeList groupBy;
@@ -313,6 +314,7 @@ SqlSelectProgressive SqlSelectProgressive() :
     selectList = SelectFutureList()
     (
         <FROM> fromClause = FromClause()
+        withFutureWhere = WithFutureWhereOpt()
         where = WhereOpt()
         withFutureGroupBy = WithFutureGroupByOpt()
         groupBy = GroupByOpt()
@@ -321,6 +323,7 @@ SqlSelectProgressive SqlSelectProgressive() :
     |
         E() {
             fromClause = null;
+            withFutureWhere = null;
             where = null;
             withFutureGroupBy = null;
             groupBy = null;
@@ -331,8 +334,8 @@ SqlSelectProgressive SqlSelectProgressive() :
     {
         return new SqlSelectProgressive(s.end(this), keywordList,
             new SqlNodeList(selectList, Span.of(selectList).pos()),
-            fromClause, where, withFutureGroupBy, groupBy, having,
-            windowDecls, null, null, null);
+            fromClause, withFutureWhere, where, withFutureGroupBy,
+            groupBy, having, windowDecls, null, null, null);
     }
 }
 
@@ -390,6 +393,23 @@ SqlSelect SqlFutureSelect() :
         return new SqlSelect(s.end(this), keywordList,
             new SqlNodeList(selectList, Span.of(selectList).pos()),
             fromClause, where, futureGroupBy, having, windowDecls, null, null, null);
+    }
+}
+
+SqlNodeList WithFutureWhereOpt() :
+{
+    List<SqlNode> list = new ArrayList<SqlNode>();
+    final Span s;
+}
+{
+    LOOKAHEAD(3)
+    <WITH> <FUTURE> <WHERE> { s = span(); }
+    list = WithFutureWhereElementList() {
+        return new SqlNodeList(list, s.addAll(list).pos());
+    }
+|
+    {
+        return null;
     }
 }
 
@@ -796,6 +816,20 @@ SqlNodeList FutureGroupByOpt() :
     {
         return null;
     }
+}
+
+List<SqlNode> WithFutureWhereElementList() :
+{
+    List<SqlNode> list = new ArrayList<SqlNode>();
+    SqlNode e;
+}
+{
+    e = Expression(ExprContext.ACCEPT_NON_QUERY) { list.add(e); }
+    (
+        <COMMA>
+        e = Expression(ExprContext.ACCEPT_NON_QUERY) { list.add(e); }
+    )*
+    { return list; }
 }
 
 List<SqlNode> FutureGroupingElementList() :

@@ -45,6 +45,13 @@ public class SqlSelectProgressiveOperator extends SqlOperator {
         .unparse(writer, SqlJoin.OPERATOR.getLeftPrec() - 1, SqlJoin.OPERATOR.getRightPrec() - 1);
     writer.endList(fromFrame);
 
+    if (select.getWithFutureGroupBy() != null) {
+      writer.sep("WITH FUTURE WHERE");
+      final SqlWriter.Frame groupFrame = writer.startList(SqlWriter.FrameTypeEnum.WHERE_LIST);
+      unparseListClause(writer, select.getWithFutureWhere());
+      writer.endList(groupFrame);
+    }
+
     if (select.getWhere() != null) {
       writer.sep("WHERE");
 
@@ -77,15 +84,15 @@ public class SqlSelectProgressiveOperator extends SqlOperator {
       }
     }
     if (select.getWithFutureGroupBy() != null) {
-        writer.sep("WITH FUTURE GROUP BY");
-        final SqlWriter.Frame groupFrame = writer.startList(SqlWriter.FrameTypeEnum.GROUP_BY_LIST);
-        if (select.getWithFutureGroupBy().getList().isEmpty()) {
-            final SqlWriter.Frame frame = writer.startList(SqlWriter.FrameTypeEnum.SIMPLE, "(", ")");
-            writer.endList(frame);
-        } else {
-            unparseListClause(writer, select.getWithFutureGroupBy());
-        }
-        writer.endList(groupFrame);
+      writer.sep("WITH FUTURE GROUP BY");
+      final SqlWriter.Frame groupFrame = writer.startList(SqlWriter.FrameTypeEnum.GROUP_BY_LIST);
+      if (select.getWithFutureGroupBy().getList().isEmpty()) {
+        final SqlWriter.Frame frame = writer.startList(SqlWriter.FrameTypeEnum.SIMPLE, "(", ")");
+        writer.endList(frame);
+      } else {
+        unparseListClause(writer, select.getWithFutureGroupBy());
+      }
+      writer.endList(groupFrame);
     }
     if (select.getGroup() != null) {
       writer.sep("GROUP BY");
