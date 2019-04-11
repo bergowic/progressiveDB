@@ -1,7 +1,5 @@
 package de.tuda.progressive.db.driver;
 
-import de.tuda.progressive.db.meta.MetaData;
-import de.tuda.progressive.db.meta.jdbc.JdbcMetaData;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -20,17 +18,7 @@ public class PostgreSQLDriver extends PartitionDriver {
           PostgresqlSqlDialect.EMPTY_CONTEXT.withDatabaseProduct(
               SqlDialect.DatabaseProduct.POSTGRESQL));
 
-  private static final int PARTITION_SIZE = 200000;
-
-  public static void main(String[] args) throws Exception {
-    try (Connection connection =
-        DriverManager.getConnection(
-            "jdbc:postgresql://localhost:5432/progressive", "postgres", "postgres")) {
-      PostgreSQLDriver driver = new PostgreSQLDriver();
-      MetaData metaData = new JdbcMetaData("jdbc:sqlite:C:/tmp/progressive.sqlite");
-      driver.prepareTable(connection, "ONTIME1M", metaData);
-    }
-  }
+  private static final int PARTITION_SIZE = 500000;
 
   private PostgreSQLDriver() {}
 
