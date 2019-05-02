@@ -178,10 +178,14 @@ public abstract class BaseContextFactory<
     final Set<SqlIdentifier> futureWhereIdentifiers = createEmptyIdentifiers();
     final SqlBasicCall where = createWhere(futureWhereIdentifiers, select.getWhere());
 
+    boolean hasAggregation = hasAggregation(metaFields);
     for (SqlIdentifier identifier : futureWhereIdentifiers) {
       metaFields.add(MetaField.FUTURE_WHERE);
       selectList.add(identifier);
-      groups.add(identifier);
+
+      if (hasAggregation) {
+        groups.add(identifier);
+      }
     }
 
     return new SqlSelect(
@@ -196,6 +200,28 @@ public abstract class BaseContextFactory<
         select.getOrderList(),
         select.getOffset(),
         select.getFetch());
+  }
+
+  private boolean hasAggregation(List<MetaField> metaFields) {
+    for (MetaField metaField : metaFields) {
+      switch (metaField) {
+        case AVG:
+        case COUNT:
+        case SUM:
+        case CONFIDENCE_INTERVAL:
+          return true;
+        case NONE:
+        case PARTITION:
+        case PROGRESS:
+        case FUTURE_GROUP:
+        case FUTURE_WHERE:
+          // ignore
+          break;
+        default:
+          throw new IllegalArgumentException("metaField not supported: " + metaField);
+      }
+    }
+    return false;
   }
 
   protected final SqlNode removeFuture(SqlNode node) {
