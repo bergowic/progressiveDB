@@ -10,6 +10,7 @@ import de.tuda.progressive.db.sql.parser.SqlUpsert;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
+import de.tuda.progressive.db.util.MetaFieldUtils;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -58,7 +59,8 @@ public class JdbcContextFactory
       SqlSelect selectSource) {
     final List<String> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
-    final SqlNodeList indexColumns = getIndexColumns(metaFields);
+    final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
+    final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
     final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
     final String sql = sourceDriver.toSql(selectSource);
 
@@ -116,7 +118,8 @@ public class JdbcContextFactory
     final SqlSelect select = (SqlSelect) view.getQuery();
     final List<String> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
-    final SqlNodeList indexColumns = getIndexColumns(metaFields);
+    final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
+    final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
     final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
     final String sql = sourceDriver.toSql(selectSource);
 
@@ -451,6 +454,7 @@ public class JdbcContextFactory
         case COUNT:
         case SUM:
         case FUTURE_GROUP:
+        case FUTURE_WHERE:
           fieldNames.add(getBufferFieldName(i++, metaField));
           break;
         case PARTITION:
@@ -576,20 +580,20 @@ public class JdbcContextFactory
         null);
   }
 
-  private SqlNodeList getIndexColumns(List<MetaField> metaFields) {
+  private SqlNodeList getIndexColumns(List<MetaField> metaFields, boolean hasAggregation) {
     return getIndexColumns(
-        metaFields, IntStream.range(0, metaFields.size()).boxed().collect(Collectors.toList()));
+        metaFields,
+        IntStream.range(0, metaFields.size()).boxed().collect(Collectors.toList()),
+        hasAggregation);
   }
 
-  private SqlNodeList getIndexColumns(List<MetaField> metaFields, List<Integer> indices) {
+  private SqlNodeList getIndexColumns(
+      List<MetaField> metaFields, List<Integer> indices, boolean hasAggregation) {
     final SqlNodeList indexColumns = new SqlNodeList(SqlParserPos.ZERO);
     for (Integer index : indices) {
       final MetaField metaField = metaFields.get(index);
-      switch (metaField) {
-        case NONE:
-        case FUTURE_GROUP:
-          indexColumns.add(SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
-          break;
+      if (MetaFieldUtils.isIndex(metaField, hasAggregation)) {
+        indexColumns.add(SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
       }
     }
     return indexColumns;

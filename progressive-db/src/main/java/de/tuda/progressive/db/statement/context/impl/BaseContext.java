@@ -1,6 +1,7 @@
 package de.tuda.progressive.db.statement.context.impl;
 
 import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.util.MetaFieldUtils;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.ArrayList;
@@ -11,10 +12,16 @@ public abstract class BaseContext {
 
   private final List<MetaField> metaFields;
 
+  private final boolean hasAggregation;
+
+  private final boolean hasIndex;
+
   private final Map<Integer, Pair<Integer, Integer>> bounds;
 
   public BaseContext(List<MetaField> metaFields, Map<Integer, Pair<Integer, Integer>> bounds) {
     this.metaFields = metaFields;
+    this.hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
+    this.hasIndex = MetaFieldUtils.hasIndex(metaFields, hasAggregation);
     this.bounds = bounds;
   }
 
@@ -40,6 +47,14 @@ public abstract class BaseContext {
 
   public List<MetaField> getMetaFields() {
     return metaFields;
+  }
+
+  public boolean hasAggregation() {
+    return hasAggregation;
+  }
+
+  public boolean hasIndex() {
+    return hasIndex;
   }
 
   public Map<Integer, Pair<Integer, Integer>> getBounds() {

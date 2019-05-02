@@ -8,6 +8,7 @@ import de.tuda.progressive.db.sql.parser.SqlFutureNode;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.ContextFactory;
 import de.tuda.progressive.db.statement.context.MetaField;
+import de.tuda.progressive.db.util.MetaFieldUtils;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -178,7 +179,7 @@ public abstract class BaseContextFactory<
     final Set<SqlIdentifier> futureWhereIdentifiers = createEmptyIdentifiers();
     final SqlBasicCall where = createWhere(futureWhereIdentifiers, select.getWhere());
 
-    boolean hasAggregation = hasAggregation(metaFields);
+    boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     for (SqlIdentifier identifier : futureWhereIdentifiers) {
       metaFields.add(MetaField.FUTURE_WHERE);
       selectList.add(identifier);
@@ -200,28 +201,6 @@ public abstract class BaseContextFactory<
         select.getOrderList(),
         select.getOffset(),
         select.getFetch());
-  }
-
-  private boolean hasAggregation(List<MetaField> metaFields) {
-    for (MetaField metaField : metaFields) {
-      switch (metaField) {
-        case AVG:
-        case COUNT:
-        case SUM:
-        case CONFIDENCE_INTERVAL:
-          return true;
-        case NONE:
-        case PARTITION:
-        case PROGRESS:
-        case FUTURE_GROUP:
-        case FUTURE_WHERE:
-          // ignore
-          break;
-        default:
-          throw new IllegalArgumentException("metaField not supported: " + metaField);
-      }
-    }
-    return false;
   }
 
   protected final SqlNode removeFuture(SqlNode node) {

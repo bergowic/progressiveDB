@@ -52,21 +52,35 @@ public class JdbcDataBuffer extends JdbcSelectDataBuffer<JdbcSelectContext>
   }
 
   private void addInternal(ResultSet result) throws SQLException {
-    if (insertBuffer == null) {
-      return;
-    }
-
     final int internalCount = result.getMetaData().getColumnCount();
 
-    // TODO execute update if exists
+    if (updateBuffer != null) {
+      while (!result.isClosed() && result.next()) {
+        // TODO support where
+        for (int i = 1; i <= result.getMetaData().getColumnCount(); i++) {
+          updateBuffer.setObject(i, result.getObject(i));
+        }
 
-    while (!result.isClosed() && result.next()) {
-      for (int i = 1; i <= internalCount; i++) {
-        insertBuffer.setObject(i, result.getObject(i));
+        if (updateBuffer.executeUpdate() == 0) {
+          insert(result, internalCount);
+        }
+      }
+    } else {
+      while (!result.isClosed() && result.next()) {
+        insert(result, internalCount);
+      }
+    }
+  }
+
+  private void insert(ResultSet result, int internalCount) throws SQLException {
+    for (int i = 1; i <= internalCount; i++) {
+      insertBuffer.setObject(i, result.getObject(i));
+
+      if (context.hasIndex() && driver.hasUpsert()) {
         insertBuffer.setObject(i + internalCount, result.getObject(i));
       }
-      insertBuffer.executeUpdate();
     }
+    insertBuffer.executeUpdate();
   }
 
   @Override
