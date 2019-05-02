@@ -1,8 +1,11 @@
 package de.tuda.progressive.db.statement.context.impl;
 
+import de.tuda.progressive.db.buffer.impl.JdbcDataBuffer;
+import de.tuda.progressive.db.buffer.impl.JdbcSelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SQLiteDriver;
 import de.tuda.progressive.db.model.Column;
+import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlParserImpl;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.MetaField;
@@ -306,6 +309,25 @@ class JdbcContextFactoryTest {
     final String sql = "select progressive count(a) a from t where c = 'a'";
 
     testAggregation(sql, singleValueRowsPartitions(2.0, 2.0));
+  }
+
+  @Test
+  void testFutureGroupByInvalid() throws Exception {
+    final String createViewSql =
+        "create progressive view pv as select count(a) cnt_a, c future from t group by c future";
+    final SqlCreateProgressiveView view =
+        (SqlCreateProgressiveView) SqlParser.create(createViewSql, config).parseStmt();
+    final JdbcSelectContext viewContext = contextFactory.create(sourceConnection, view, null);
+
+    try (JdbcDataBuffer viewDataBuffer =
+        new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, viewContext)) {
+
+      final String selectViewSql = "select progressive * from pv with future group by c";
+      final SqlSelectProgressive select =
+          (SqlSelectProgressive) SqlParser.create(selectViewSql, config).parseQuery();
+
+      assertThrows(Throwable.class, () -> contextFactory.create(viewDataBuffer, select, null));
+    }
   }
   /*
   	@Test
