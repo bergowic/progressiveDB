@@ -24,6 +24,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.function.Function;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class BaseContextFactoryTest {
@@ -155,6 +156,13 @@ class BaseContextFactoryTest {
   @Test
   void testFutureWhereAggregation() throws Exception {
     test(true, "(a = 1) future", "a", null, "a");
+  }
+
+  @Test
+  void testFutureWhereNested() {
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> test("((a = 1) future or (a = 2)) future", "a", null));
   }
 
   static class Factory
