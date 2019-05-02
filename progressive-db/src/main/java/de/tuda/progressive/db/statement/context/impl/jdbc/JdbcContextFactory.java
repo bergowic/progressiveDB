@@ -539,7 +539,7 @@ public class JdbcContextFactory
         case COUNT:
         case SUM:
           newColumn =
-              SqlUtils.createPercentAggregation(
+              SqlUtils.createSumPercentAggregation(
                   index++, SqlUtils.getIdentifier(bufferFieldNames.get(i++)));
           break;
         case PARTITION:
