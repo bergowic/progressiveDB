@@ -15,8 +15,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.Connection;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -111,7 +110,7 @@ public abstract class BaseContextFactory<
       throw new IllegalArgumentException("operation is not supported: " + operator.getName());
     }
     if (column instanceof SqlFutureNode) {
-      return MetaField.FUTURE;
+      return MetaField.FUTURE_GROUP;
     }
 
     throw new IllegalArgumentException("column type is not supported: " + column.getClass());
@@ -148,7 +147,7 @@ public abstract class BaseContextFactory<
         case PROGRESS:
           // don't add anything
           break;
-        case FUTURE:
+        case FUTURE_GROUP:
           selectList.add(removeFuture(oldSelectList.get(i)));
           break;
         case CONFIDENCE_INTERVAL:
@@ -176,7 +175,14 @@ public abstract class BaseContextFactory<
       from = oldFrom;
     }
 
-    final SqlBasicCall where = createWhere((SqlBasicCall) select.getWhere());
+    final Set<SqlIdentifier> futureWhereIdentifiers = createEmptyIdentifiers();
+    final SqlBasicCall where = createWhere(futureWhereIdentifiers, select.getWhere());
+
+    for (SqlIdentifier identifier : futureWhereIdentifiers) {
+      metaFields.add(MetaField.FUTURE_WHERE);
+      selectList.add(identifier);
+      groups.add(identifier);
+    }
 
     return new SqlSelect(
         SqlParserPos.ZERO,
@@ -190,18 +196,6 @@ public abstract class BaseContextFactory<
         select.getOrderList(),
         select.getOffset(),
         select.getFetch());
-  }
-
-  protected final SqlNodeList removeFutures(SqlNodeList nodes) {
-    if (nodes == null) {
-      return null;
-    }
-
-    return new SqlNodeList(
-        StreamSupport.stream(nodes.spliterator(), false)
-            .map(this::removeFuture)
-            .collect(Collectors.toList()),
-        SqlParserPos.ZERO);
   }
 
   protected final SqlNode removeFuture(SqlNode node) {
@@ -224,18 +218,19 @@ public abstract class BaseContextFactory<
     return node;
   }
 
-  private SqlBasicCall createWhere(SqlBasicCall oldWhere) {
+  private SqlBasicCall createWhere(Set<SqlIdentifier> identifiers, SqlNode oldWhere) {
+    final SqlBasicCall where = transformWhere(identifiers, oldWhere);
     if (!sourceDriver.hasPartitions()) {
-      return oldWhere;
+      return where;
     }
 
     final SqlBasicCall eqPartition = createWhereEqPartition();
-    if (oldWhere == null) {
+    if (where == null) {
       return eqPartition;
     }
 
     return new SqlBasicCall(
-        SqlStdOperatorTable.AND, new SqlNode[] {oldWhere, eqPartition}, SqlParserPos.ZERO);
+        SqlStdOperatorTable.AND, new SqlNode[] {where, eqPartition}, SqlParserPos.ZERO);
   }
 
   private SqlBasicCall createWhereEqPartition() {
@@ -246,5 +241,136 @@ public abstract class BaseContextFactory<
           new SqlDynamicParam(0, SqlParserPos.ZERO)
         },
         SqlParserPos.ZERO);
+  }
+
+  private SqlBasicCall transformWhere(Set<SqlIdentifier> identifiers, SqlNode oldWhere) {
+    if (oldWhere == null) {
+      return null;
+    }
+
+    return get(identifiers, oldWhere, false, false);
+  }
+
+  private Set<SqlIdentifier> createEmptyIdentifiers() {
+    return new TreeSet<>(
+        (id1, id2) -> {
+          for (int i = 0; i < Math.min(id1.names.size(), id2.names.size()); i++) {
+            int compared = id1.names.get(i).compareTo(id2.names.get(i));
+            if (compared != 0) {
+              return compared;
+            }
+          }
+          return id1.names.size() - id2.names.size();
+        });
+  }
+
+  private SqlBasicCall get(
+      Set<SqlIdentifier> identifiers, SqlNode node, boolean add, boolean inFuture) {
+    if (node instanceof SqlFutureNode) {
+      if (inFuture) {
+        throw new IllegalArgumentException("future nodes must not be nested");
+      }
+
+      inFuture = true;
+      node = ((SqlFutureNode) node).getNode();
+    }
+
+    final SqlBasicCall call = (SqlBasicCall) node;
+    switch (call.getOperator().getName()) {
+      case "AND":
+        {
+          boolean leftFuture = isFullFuture(call.getOperands()[0]);
+          boolean rightFuture = isFullFuture(call.getOperands()[1]);
+          boolean reverse = add && leftFuture && rightFuture;
+
+          final SqlBasicCall left = get(identifiers, call.getOperands()[0], reverse, inFuture);
+          final SqlBasicCall right = get(identifiers, call.getOperands()[1], reverse, inFuture);
+
+          if (leftFuture) {
+            addIdentifiers(identifiers, call.getOperands()[0]);
+          }
+          if (rightFuture) {
+            addIdentifiers(identifiers, call.getOperands()[1]);
+          }
+
+          if (left == null) {
+            return right;
+          } else if (right == null) {
+            return left;
+          } else {
+            return new SqlBasicCall(
+                reverse ? SqlStdOperatorTable.OR : SqlStdOperatorTable.AND,
+                new SqlNode[] {left, right},
+                SqlParserPos.ZERO);
+          }
+        }
+      case "OR":
+        {
+          boolean leftFuture = isFullFuture(call.getOperands()[0]);
+          boolean rightFuture = isFullFuture(call.getOperands()[1]);
+          boolean newAdd = add || (leftFuture ^ rightFuture);
+
+          final SqlBasicCall left = get(identifiers, call.getOperands()[0], newAdd, inFuture);
+          final SqlBasicCall right = get(identifiers, call.getOperands()[1], newAdd, inFuture);
+
+          addIdentifiers(identifiers, call.getOperands()[0]);
+          addIdentifiers(identifiers, call.getOperands()[1]);
+
+          if (left == null) {
+            return right;
+          } else if (right == null) {
+            return left;
+          } else {
+            return new SqlBasicCall(
+                SqlStdOperatorTable.OR, new SqlNode[] {left, right}, SqlParserPos.ZERO);
+          }
+        }
+      default:
+        if (inFuture || add) {
+          addIdentifiers(identifiers, call);
+        }
+
+        if (!inFuture || add) {
+          return call;
+        }
+    }
+
+    return null;
+  }
+
+  private boolean isFullFuture(SqlNode node) {
+    if (node instanceof SqlFutureNode) {
+      return true;
+    } else if (node instanceof SqlBasicCall) {
+      final SqlBasicCall call = (SqlBasicCall) node;
+      switch (call.getOperator().getName().toUpperCase()) {
+        case "AND":
+        case "OR":
+          return isFullFuture(call.getOperands()[0]) && isFullFuture(call.getOperands()[1]);
+        default:
+          return false;
+      }
+    } else {
+      throw new IllegalArgumentException("node type not expected: " + node);
+    }
+  }
+
+  private void addIdentifiers(Set<SqlIdentifier> identifiers, SqlNode node) {
+    if (node == null) {
+      return;
+    }
+
+    if (node instanceof SqlBasicCall) {
+      Arrays.stream(((SqlBasicCall) node).getOperands())
+          .forEach(n -> addIdentifiers(identifiers, n));
+    } else if (node instanceof SqlIdentifier) {
+      identifiers.add((SqlIdentifier) node);
+    } else if (node instanceof SqlFutureNode) {
+      addIdentifiers(identifiers, ((SqlFutureNode) node).getNode());
+    } else if (node instanceof SqlLiteral) {
+      // ignore
+    } else {
+      throw new IllegalArgumentException("node type not expected: " + node);
+    }
   }
 }

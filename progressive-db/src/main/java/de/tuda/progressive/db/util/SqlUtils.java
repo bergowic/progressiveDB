@@ -167,7 +167,7 @@ public class SqlUtils {
             statement.setDouble(pos++, progress);
             break;
           case NONE:
-          case FUTURE:
+          case FUTURE_GROUP:
           case CONFIDENCE_INTERVAL:
             // do nothing
             break;

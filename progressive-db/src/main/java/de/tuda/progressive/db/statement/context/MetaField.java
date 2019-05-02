@@ -5,7 +5,8 @@ public enum MetaField {
   AVG(false, false),
   COUNT(false, true),
   SUM(false, true),
-  FUTURE(false, false),
+  FUTURE_GROUP(false, false),
+  FUTURE_WHERE(false, false),
   PARTITION(true, true),
   PROGRESS(true, true),
   CONFIDENCE_INTERVAL(true, false);

@@ -204,7 +204,7 @@ public class JdbcContextFactory
 
       final List<MetaField> metaFields = context.getMetaFields();
       for (int i = 0; i < metaFields.size(); i++) {
-        if (metaFields.get(i) != MetaField.FUTURE) {
+        if (metaFields.get(i) != MetaField.FUTURE_GROUP) {
           indices.add(i);
         }
       }
@@ -248,7 +248,7 @@ public class JdbcContextFactory
     if (withFutureGroupBy != null) {
       for (SqlNode group : withFutureGroupBy) {
         final Triple<String, Integer, MetaField> field =
-            getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE));
+            getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE_GROUP));
 
         groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
       }
@@ -258,7 +258,10 @@ public class JdbcContextFactory
       for (SqlNode group : groupBy) {
         final Triple<String, Integer, MetaField> field =
             getField(
-                fieldMapper, group, metaFields, EnumSet.complementOf(EnumSet.of(MetaField.FUTURE)));
+                fieldMapper,
+                group,
+                metaFields,
+                EnumSet.complementOf(EnumSet.of(MetaField.FUTURE_GROUP)));
 
         groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
       }
@@ -308,7 +311,7 @@ public class JdbcContextFactory
                 metaFields,
                 nodes.get(i),
                 true,
-                EnumSet.of(MetaField.NONE, MetaField.FUTURE));
+                EnumSet.of(MetaField.NONE, MetaField.FUTURE_GROUP));
 
         nodes.set(i, substituted.getLeft());
       }
@@ -316,7 +319,7 @@ public class JdbcContextFactory
     }
 
     return substituteFields(
-            fieldMapper, metaFields, node, true, EnumSet.of(MetaField.NONE, MetaField.FUTURE))
+            fieldMapper, metaFields, node, true, EnumSet.of(MetaField.NONE, MetaField.FUTURE_GROUP))
         .getLeft();
   }
 
@@ -363,7 +366,7 @@ public class JdbcContextFactory
               SqlUtils.createPercentAggregation(
                   index, SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
           break;
-        case FUTURE:
+        case FUTURE_GROUP:
         case NONE:
           node = SqlUtils.getIdentifier(getBufferFieldName(index, metaField));
           break;
@@ -447,7 +450,7 @@ public class JdbcContextFactory
         case NONE:
         case COUNT:
         case SUM:
-        case FUTURE:
+        case FUTURE_GROUP:
           fieldNames.add(getBufferFieldName(i++, metaField));
           break;
         case PARTITION:
@@ -541,7 +544,7 @@ public class JdbcContextFactory
         case PROGRESS:
           newColumn = SqlUtils.createFunctionMetaField(index++, SqlTypeName.FLOAT);
           break;
-        case FUTURE:
+        case FUTURE_GROUP:
           // ignore
           i++;
           break;
@@ -584,7 +587,7 @@ public class JdbcContextFactory
       final MetaField metaField = metaFields.get(index);
       switch (metaField) {
         case NONE:
-        case FUTURE:
+        case FUTURE_GROUP:
           indexColumns.add(SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
           break;
       }
