@@ -168,6 +168,7 @@ public class SqlUtils {
             break;
           case NONE:
           case FUTURE_GROUP:
+          case FUTURE_WHERE:
           case CONFIDENCE_INTERVAL:
             // do nothing
             break;

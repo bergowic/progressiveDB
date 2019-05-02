@@ -4,7 +4,6 @@ import de.tuda.progressive.db.buffer.impl.JdbcDataBuffer;
 import de.tuda.progressive.db.buffer.impl.JdbcSelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.SQLiteDriver;
-import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlParserImpl;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
@@ -26,6 +25,7 @@ import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@SuppressWarnings("unchecked")
 class JdbcContextFactoryTest {
 
   private static final DbDriver driver = SQLiteDriver.INSTANCE;
@@ -329,37 +329,95 @@ class JdbcContextFactoryTest {
       assertThrows(Throwable.class, () -> contextFactory.create(viewDataBuffer, select, null));
     }
   }
-  /*
-  	@Test
-  	void testProgressiveView() throws Exception {
-  		final String sql = "create progressive view v as select count(*) cnt, b, c future from t group by b, c future";
 
-  //		testAggregation(sql, singleValueRowsPartitions(1.0));
-  		final SqlCreateProgressiveView view = (SqlCreateProgressiveView) SqlParser.create(sql, config).parseQuery();
-  		final JdbcSelectContext context = contextFactory.create(sourceConnection, view);
+  private void testFutureWhere(String viewSql, String selectSql, List<Object[]> expected)
+      throws Exception {
+    final SqlCreateProgressiveView view =
+        (SqlCreateProgressiveView) SqlParser.create(viewSql, config).parseStmt();
+    final JdbcSelectContext viewContext = contextFactory.create(sourceConnection, view, null);
+    final JdbcDataBuffer viewDataBuffer =
+        new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, viewContext);
 
-  		final JdbcDataBuffer dataBuffer = new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, context);
+    try (Statement statement = sourceConnection.createStatement()) {
+      for (int i = 0; i < 2; i++) {
+        try (ResultSet resultSet =
+            statement.executeQuery(getSelectSource(viewContext.getSelectSource(), i))) {
+          viewDataBuffer.add(resultSet);
+        }
+      }
+    }
 
-  		final String sql2 = "select cnt, c from v group by c";
-  		final SqlSelect select = (SqlSelect) SqlParser.create(sql2, config).parseQuery();
-  		final JdbcSourceContext context2 = contextFactory.create(dataBuffer, select);
+    final SqlSelectProgressive select =
+        (SqlSelectProgressive) SqlParser.create(selectSql, config).parseQuery();
+    final JdbcSourceContext selectContext = contextFactory.create(viewDataBuffer, select, null);
+    final JdbcSelectDataBuffer selectDataBuffer =
+        new JdbcSelectDataBuffer(
+            SQLiteDriver.INSTANCE,
+            bufferConnection,
+            selectContext,
+            selectContext.getSelectSource());
 
-  		try (PreparedStatement statement = bufferConnection.prepareStatement(driver.toSql(context2.getSelectSource()))) {
-  			try (ResultSet resultSet = statement.executeQuery()) {
+    List<Object[]> result = selectDataBuffer.get(2, 1.0);
+    assertEquals(expected.size(), result.size());
 
-  			}
-  		}
-
-  		System.out.println(context);
-  	}*/
+    for (int i = 0; i < expected.size(); i++) {
+      assertArrayEquals(expected.get(i), result.get(i));
+    }
+  }
 
   @Test
-  void confidence() throws Exception {
-    final String sql = "select progressive avg(a), progressive_confidence(a), c from t group by c";
-    final SqlSelectProgressive select = (SqlSelectProgressive) SqlParser.create(sql, config).parseQuery();
-    final JdbcSelectContext context =
-        contextFactory.create(sourceConnection, select, p -> new Column());
+  void testFutureWhereDefault() throws Exception {
+    testFutureWhere(
+        "create progressive view pv as select count(a) from t where (c = 'a') future",
+        "select progressive * from pv",
+        valuesPartition(valuesRow(5.0)));
+  }
 
-    System.out.println();
+  @Test
+  void testFutureWhereOne() throws Exception {
+    testFutureWhere(
+        "create progressive view pv as select count(a) from t where (c = 'a') future",
+        "select progressive * from pv with future where c = 'a'",
+        valuesPartition(valuesRow(2.0)));
+  }
+
+  @Test
+  void testFutureWhereTwo() throws Exception {
+    testFutureWhere(
+            "create progressive view pv as select count(a) from t where (c = 'a') future or (c = 'b') future",
+            "select progressive * from pv with future where c = 'a', c = 'b'",
+            valuesPartition(valuesRow(4.0)));
+  }
+
+  @Test
+  void testFutureWhereMixedDefault() throws Exception {
+    testFutureWhere(
+            "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
+            "select progressive * from pv",
+            valuesPartition(valuesRow(3.0)));
+  }
+
+  @Test
+  void testFutureWhereMixedOne() throws Exception {
+    testFutureWhere(
+            "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
+            "select progressive * from pv with future where c = 'a'",
+            valuesPartition(valuesRow(1.0)));
+  }
+
+  @Test
+  void testFutureWhereGroupDefault() throws Exception {
+    testFutureWhere(
+        "create progressive view pv as select count(a), c from t where (c = 'a') future group by c",
+        "select progressive * from pv with future where c = 'a'",
+        valuesPartition(valuesRow(2.0, "a"), valuesRow(2.0, "b"), valuesRow(1.0, "c")));
+  }
+
+  @Test
+  void testFutureWhereGroupOne() throws Exception {
+    testFutureWhere(
+        "create progressive view pv as select count(a), c from t where (c = 'a') future group by c",
+        "select progressive * from pv with future where c = 'a'",
+        valuesPartition(valuesRow(2.0, "a")));
   }
 }
