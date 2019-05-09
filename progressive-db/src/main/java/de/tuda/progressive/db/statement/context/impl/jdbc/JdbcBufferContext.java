@@ -2,6 +2,8 @@ package de.tuda.progressive.db.statement.context.impl.jdbc;
 
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
+import de.tuda.progressive.db.util.ContextUtils;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -10,7 +12,7 @@ import java.util.Map;
 
 public class JdbcBufferContext extends JdbcSourceContext {
 
-  private final List<String> fieldNames;
+  private final List<SqlIdentifier> fieldNames;
 
   private final SqlSelect selectBuffer;
 
@@ -18,7 +20,7 @@ public class JdbcBufferContext extends JdbcSourceContext {
       List<MetaField> metaFields,
       Map<Integer, Pair<Integer, Integer>> bounds,
       SqlSelect selectSource,
-      List<String> fieldNames,
+      List<SqlIdentifier> fieldNames,
       SqlSelect selectBuffer) {
     super(metaFields, bounds, selectSource);
 
@@ -26,17 +28,12 @@ public class JdbcBufferContext extends JdbcSourceContext {
     this.selectBuffer = selectBuffer;
   }
 
-  public List<String> getFieldNames() {
+  public List<SqlIdentifier> getFieldNames() {
     return fieldNames;
   }
 
-  public int getFieldIndex(String fieldName) {
-    for (int i = 0; i < fieldNames.size(); i++) {
-      if (fieldName.equalsIgnoreCase(fieldNames.get(i))) {
-        return i;
-      }
-    }
-    return -1;
+  public int getFieldIndex(SqlIdentifier fieldName) {
+    return ContextUtils.getFieldIndex(fieldNames, fieldName);
   }
 
   public SqlSelect getSelectBuffer() {
@@ -47,11 +44,11 @@ public class JdbcBufferContext extends JdbcSourceContext {
           C extends JdbcBufferContext, B extends AbstractBuilder<C, B>>
       extends JdbcSourceContext.AbstractBuilder<C, B> {
 
-    private List<String> fieldNames;
+    private List<SqlIdentifier> fieldNames;
 
     private SqlSelect selectBuffer;
 
-    public B fieldNames(List<String> fieldNames) {
+    public B fieldNames(List<SqlIdentifier> fieldNames) {
       this.fieldNames = fieldNames;
       return (B) this;
     }
@@ -73,7 +70,7 @@ public class JdbcBufferContext extends JdbcSourceContext {
         List<MetaField> metaFields,
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
-        List<String> fieldNames,
+        List<SqlIdentifier> fieldNames,
         SqlSelect selectBuffer);
   }
 
@@ -83,7 +80,7 @@ public class JdbcBufferContext extends JdbcSourceContext {
         List<MetaField> metaFields,
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
-        List<String> fieldNames,
+        List<SqlIdentifier> fieldNames,
         SqlSelect selectBuffer) {
       return new JdbcBufferContext(metaFields, bounds, selectSource, fieldNames, selectBuffer);
     }

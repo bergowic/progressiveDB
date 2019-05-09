@@ -57,7 +57,7 @@ public class JdbcContextFactory
       Function<Pair<String, String>, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource) {
-    final List<String> fieldNames = getFieldNames(select.getSelectList());
+    final List<SqlIdentifier> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
     final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
@@ -116,7 +116,7 @@ public class JdbcContextFactory
       List<MetaField> metaFields,
       SqlSelect selectSource) {
     final SqlSelect select = (SqlSelect) view.getQuery();
-    final List<String> fieldNames = getFieldNames(select.getSelectList());
+    final List<SqlIdentifier> fieldNames = getFieldNames(select.getSelectList());
     final List<String> bufferFieldNames = getBufferFieldNames(metaFields);
     final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
@@ -146,7 +146,7 @@ public class JdbcContextFactory
   }
 
   private Map<Integer, Pair<Integer, Integer>> getBounds(
-      Function<String, Integer> fieldMapper,
+      Function<SqlIdentifier, Integer> fieldMapper,
       List<MetaField> metaFields,
       Function<Integer, Pair<Integer, Integer>> boundMapper,
       SqlNodeList selectList) {
@@ -155,7 +155,7 @@ public class JdbcContextFactory
     for (int i = 0; i < metaFields.size(); i++) {
       if (metaFields.get(i) == MetaField.CONFIDENCE_INTERVAL) {
         SqlNode node = selectList.get(i);
-        String fieldName = null;
+        SqlIdentifier fieldName = null;
 
         if (node instanceof SqlBasicCall) {
           final SqlBasicCall call = (SqlBasicCall) node;
@@ -166,7 +166,7 @@ public class JdbcContextFactory
         }
 
         if (node instanceof SqlIdentifier) {
-          fieldName = ((SqlIdentifier) node).getSimple();
+          fieldName = (SqlIdentifier) node;
         }
 
         final int index = fieldMapper.apply(fieldName);
@@ -242,7 +242,7 @@ public class JdbcContextFactory
   }
 
   private SqlNodeList getGroupsByFuture(
-      Function<String, Integer> fieldMapper,
+      Function<SqlIdentifier, Integer> fieldMapper,
       List<MetaField> metaFields,
       SqlNodeList withFutureGroupBy,
       SqlNodeList groupBy) {
@@ -250,7 +250,7 @@ public class JdbcContextFactory
 
     if (withFutureGroupBy != null) {
       for (SqlNode group : withFutureGroupBy) {
-        final Triple<String, Integer, MetaField> field =
+        final Triple<SqlIdentifier, Integer, MetaField> field =
             getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE_GROUP));
 
         groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
@@ -259,7 +259,7 @@ public class JdbcContextFactory
 
     if (groupBy != null) {
       for (SqlNode group : groupBy) {
-        final Triple<String, Integer, MetaField> field =
+        final Triple<SqlIdentifier, Integer, MetaField> field =
             getField(
                 fieldMapper,
                 group,
@@ -273,8 +273,8 @@ public class JdbcContextFactory
     return groups;
   }
 
-  private Triple<String, Integer, MetaField> getField(
-      Function<String, Integer> fieldMapper,
+  private Triple<SqlIdentifier, Integer, MetaField> getField(
+      Function<SqlIdentifier, Integer> fieldMapper,
       SqlNode node,
       List<MetaField> metaFields,
       EnumSet<MetaField> valid) {
@@ -282,10 +282,9 @@ public class JdbcContextFactory
       throw new IllegalArgumentException("field is not an identifier: " + node);
     }
 
-    final String name = ((SqlIdentifier) node).getSimple();
-    final int index = fieldMapper.apply(name);
+    final int index = fieldMapper.apply((SqlIdentifier) node);
     if (index < 0) {
-      throw new IllegalArgumentException("field not found: " + name);
+      throw new IllegalArgumentException("field not found: " + node);
     }
 
     final MetaField metaField = metaFields.get(index);
@@ -296,11 +295,11 @@ public class JdbcContextFactory
       }
     }
 
-    return ImmutableTriple.of(name, index, metaField);
+    return ImmutableTriple.of((SqlIdentifier) node, index, metaField);
   }
 
   private SqlNode replaceFieldNames(
-      Function<String, Integer> fieldMapper, SqlNode node, List<MetaField> metaFields) {
+      Function<SqlIdentifier, Integer> fieldMapper, SqlNode node, List<MetaField> metaFields) {
     if (node == null) {
       return null;
     }
@@ -327,7 +326,9 @@ public class JdbcContextFactory
   }
 
   private List<Integer> substituteFields(
-      Function<String, Integer> fieldMapper, List<MetaField> metaFields, SqlNodeList selectList) {
+      Function<SqlIdentifier, Integer> fieldMapper,
+      List<MetaField> metaFields,
+      SqlNodeList selectList) {
     final List<Integer> indices = new ArrayList<>();
 
     for (int i = 0; i < selectList.size(); i++) {
@@ -342,7 +343,7 @@ public class JdbcContextFactory
   }
 
   private Pair<SqlNode, List<Integer>> substituteFields(
-      Function<String, Integer> fieldMapper,
+      Function<SqlIdentifier, Integer> fieldMapper,
       List<MetaField> metaFields,
       SqlNode node,
       boolean addAlias,
@@ -350,9 +351,9 @@ public class JdbcContextFactory
     final List<Integer> indices = new ArrayList<>();
 
     if (node instanceof SqlIdentifier) {
-      final Triple<String, Integer, MetaField> field =
+      final Triple<SqlIdentifier, Integer, MetaField> field =
           getField(fieldMapper, node, metaFields, valid);
-      final String fieldName = field.getLeft();
+      final SqlIdentifier fieldName = field.getLeft();
       final int index = field.getMiddle();
       final MetaField metaField = field.getRight();
 
@@ -415,27 +416,30 @@ public class JdbcContextFactory
     return ImmutablePair.of(node, indices);
   }
 
-  private List<String> getFieldNames(SqlNodeList selectList) {
-    final List<String> fieldNames = new ArrayList<>(selectList.size());
+  private List<SqlIdentifier> getFieldNames(SqlNodeList selectList) {
+    final List<SqlIdentifier> fieldNames = new ArrayList<>(selectList.size());
     for (SqlNode select : selectList) {
-      String name = null;
+      SqlIdentifier identifier = null;
       if (select instanceof SqlBasicCall) {
         SqlBasicCall call = (SqlBasicCall) select;
 
         if (SqlStdOperatorTable.AS.equals(call.getOperator())) {
           select = call.operands[1];
         } else {
-          name = call.getOperator().getName();
+          identifier = SqlUtils.getIdentifier(call.getOperator().getName());
         }
       } else if (select instanceof SqlFutureNode) {
         SqlFutureNode futureNode = (SqlFutureNode) select;
         select = futureNode.getNode();
       }
 
-      if (name == null) {
-        name = select.toString();
+      if (identifier == null) {
+        if (!(select instanceof SqlIdentifier)) {
+          throw new IllegalArgumentException("future in select must contain an identifier");
+        }
+        identifier = (SqlIdentifier) select;
       }
-      fieldNames.add(name);
+      fieldNames.add(identifier);
     }
     return fieldNames;
   }
@@ -510,7 +514,7 @@ public class JdbcContextFactory
   private SqlSelect getSelectBuffer(
       List<String> bufferFieldNames,
       String bufferTableName,
-      List<String> fieldNames,
+      List<SqlIdentifier> fieldNames,
       List<MetaField> metaFields) {
     final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
     final SqlNodeList groupBy = new SqlNodeList(SqlParserPos.ZERO);
@@ -518,7 +522,7 @@ public class JdbcContextFactory
     int i = 0;
     int index = 0;
     for (int j = 0; j < fieldNames.size(); j++) {
-      final String alias = fieldNames.get(j);
+      final SqlIdentifier alias = fieldNames.get(j);
       final MetaField metaField = metaFields.get(j);
 
       SqlNode newColumn = null;

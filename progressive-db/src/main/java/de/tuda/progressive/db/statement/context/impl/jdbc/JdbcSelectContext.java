@@ -1,6 +1,7 @@
 package de.tuda.progressive.db.statement.context.impl.jdbc;
 
 import de.tuda.progressive.db.statement.context.MetaField;
+import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlInsert;
 import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.SqlUpdate;
@@ -22,7 +23,7 @@ public class JdbcSelectContext extends JdbcBufferContext {
       List<MetaField> metaFields,
       Map<Integer, Pair<Integer, Integer>> bounds,
       SqlSelect selectSource,
-      List<String> fieldNames,
+      List<SqlIdentifier> fieldNames,
       SqlCreateTable createBuffer,
       SqlInsert insertBuffer,
       SqlUpdate updateBuffer,
@@ -74,7 +75,7 @@ public class JdbcSelectContext extends JdbcBufferContext {
         List<MetaField> metaFields,
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
-        List<String> fieldNames,
+        List<SqlIdentifier> fieldNames,
         SqlSelect selectBuffer) {
       return new JdbcSelectContext(
           metaFields,
