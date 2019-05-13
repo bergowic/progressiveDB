@@ -13,10 +13,13 @@ import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.Connection;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -176,16 +179,18 @@ public abstract class BaseContextFactory<
       from = oldFrom;
     }
 
-    final Set<SqlIdentifier> futureWhereIdentifiers = createEmptyIdentifiers();
-    final SqlBasicCall where = createWhere(futureWhereIdentifiers, select.getWhere());
+    final List<SqlNode> futures = new ArrayList<>();
+    final SqlBasicCall where = createWhere(futures, select.getWhere());
 
     boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
-    for (SqlIdentifier identifier : futureWhereIdentifiers) {
+    for (int i = 0; i < futures.size(); i++) {
+      final SqlIdentifier name = getFutureWhereName(i);
       metaFields.add(MetaField.FUTURE_WHERE);
-      selectList.add(identifier);
+      selectList.add(
+          SqlUtils.getAlias(SqlUtils.createCast(futures.get(i), SqlTypeName.INTEGER), name));
 
       if (hasAggregation) {
-        groups.add(identifier);
+        groups.add(name);
       }
     }
 
@@ -223,8 +228,8 @@ public abstract class BaseContextFactory<
     return node;
   }
 
-  private SqlBasicCall createWhere(Set<SqlIdentifier> identifiers, SqlNode oldWhere) {
-    final SqlBasicCall where = transformWhere(identifiers, oldWhere);
+  private SqlBasicCall createWhere(List<SqlNode> futures, SqlNode oldWhere) {
+    final SqlBasicCall where = transformWhere(futures, oldWhere);
     if (!sourceDriver.hasPartitions()) {
       return where;
     }
@@ -248,29 +253,15 @@ public abstract class BaseContextFactory<
         SqlParserPos.ZERO);
   }
 
-  private SqlBasicCall transformWhere(Set<SqlIdentifier> identifiers, SqlNode oldWhere) {
+  private SqlBasicCall transformWhere(List<SqlNode> futures, SqlNode oldWhere) {
     if (oldWhere == null) {
       return null;
     }
 
-    return get(identifiers, oldWhere, false, false);
+    return get(futures, oldWhere, false, false);
   }
 
-  private Set<SqlIdentifier> createEmptyIdentifiers() {
-    return new TreeSet<>(
-        (id1, id2) -> {
-          for (int i = 0; i < Math.min(id1.names.size(), id2.names.size()); i++) {
-            int compared = id1.names.get(i).compareTo(id2.names.get(i));
-            if (compared != 0) {
-              return compared;
-            }
-          }
-          return id1.names.size() - id2.names.size();
-        });
-  }
-
-  private SqlBasicCall get(
-      Set<SqlIdentifier> identifiers, SqlNode node, boolean add, boolean inFuture) {
+  private SqlBasicCall get(List<SqlNode> futures, SqlNode node, boolean add, boolean inFuture) {
     if (node instanceof SqlFutureNode) {
       if (inFuture) {
         throw new IllegalArgumentException("future nodes must not be nested");
@@ -278,6 +269,7 @@ public abstract class BaseContextFactory<
 
       inFuture = true;
       node = ((SqlFutureNode) node).getNode();
+      futures.add(node);
     }
 
     final SqlBasicCall call = (SqlBasicCall) node;
@@ -288,15 +280,8 @@ public abstract class BaseContextFactory<
           boolean rightFuture = isFullFuture(call.getOperands()[1]);
           boolean reverse = add && leftFuture && rightFuture;
 
-          final SqlBasicCall left = get(identifiers, call.getOperands()[0], reverse, inFuture);
-          final SqlBasicCall right = get(identifiers, call.getOperands()[1], reverse, inFuture);
-
-          if (leftFuture) {
-            addIdentifiers(identifiers, call.getOperands()[0]);
-          }
-          if (rightFuture) {
-            addIdentifiers(identifiers, call.getOperands()[1]);
-          }
+          final SqlBasicCall left = get(futures, call.getOperands()[0], reverse, inFuture);
+          final SqlBasicCall right = get(futures, call.getOperands()[1], reverse, inFuture);
 
           if (left == null) {
             return right;
@@ -315,11 +300,8 @@ public abstract class BaseContextFactory<
           boolean rightFuture = isFullFuture(call.getOperands()[1]);
           boolean newAdd = add || (leftFuture ^ rightFuture);
 
-          final SqlBasicCall left = get(identifiers, call.getOperands()[0], newAdd, inFuture);
-          final SqlBasicCall right = get(identifiers, call.getOperands()[1], newAdd, inFuture);
-
-          addIdentifiers(identifiers, call.getOperands()[0]);
-          addIdentifiers(identifiers, call.getOperands()[1]);
+          final SqlBasicCall left = get(futures, call.getOperands()[0], newAdd, inFuture);
+          final SqlBasicCall right = get(futures, call.getOperands()[1], newAdd, inFuture);
 
           if (left == null) {
             return right;
@@ -331,10 +313,6 @@ public abstract class BaseContextFactory<
           }
         }
       default:
-        if (inFuture || add) {
-          addIdentifiers(identifiers, call);
-        }
-
         if (!inFuture || add) {
           return call;
         }
@@ -360,22 +338,7 @@ public abstract class BaseContextFactory<
     }
   }
 
-  private void addIdentifiers(Set<SqlIdentifier> identifiers, SqlNode node) {
-    if (node == null) {
-      return;
-    }
-
-    if (node instanceof SqlBasicCall) {
-      Arrays.stream(((SqlBasicCall) node).getOperands())
-          .forEach(n -> addIdentifiers(identifiers, n));
-    } else if (node instanceof SqlIdentifier) {
-      identifiers.add((SqlIdentifier) node);
-    } else if (node instanceof SqlFutureNode) {
-      addIdentifiers(identifiers, ((SqlFutureNode) node).getNode());
-    } else if (node instanceof SqlLiteral) {
-      // ignore
-    } else {
-      throw new IllegalArgumentException("node type not expected: " + node);
-    }
+  protected SqlIdentifier getFutureWhereName(int index) {
+    return SqlUtils.getIdentifier(String.format("FUTURE_WHERE_%d", index));
   }
 }
