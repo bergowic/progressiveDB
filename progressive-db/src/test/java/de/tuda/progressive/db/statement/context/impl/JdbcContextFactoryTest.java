@@ -322,7 +322,7 @@ class JdbcContextFactoryTest {
     try (JdbcDataBuffer viewDataBuffer =
         new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, viewContext)) {
 
-      final String selectViewSql = "select progressive * from pv with future group by c";
+      final String selectViewSql = "select progressive cnt_a, c from pv group by c";
       final SqlSelectProgressive select =
           (SqlSelectProgressive) SqlParser.create(selectViewSql, config).parseQuery();
 
@@ -330,7 +330,35 @@ class JdbcContextFactoryTest {
     }
   }
 
-  private void testFutureWhere(String viewSql, String selectSql, List<Object[]> expected)
+  @Test
+  void testFutureGroupByDefault() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a), c future from t group by c future",
+        "select progressive * from pv",
+        valuesPartition(valuesRow(5.0)));
+  }
+
+    @Test
+    void testFutureGroupByOne() throws Exception {
+        testFuture(
+                "create progressive view pv as select count(a), c future from t group by c future",
+                "select progressive * from pv with future group by c",
+                valuesPartition(
+                        valuesRow(2.0, "a"),
+                        valuesRow(2.0, "b"),
+                        valuesRow(1.0, "c")
+                ));
+    }
+
+  @Test
+  void testFutureWhereDefault() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future",
+        "select progressive * from pv",
+        valuesPartition(valuesRow(5.0)));
+  }
+
+  private void testFuture(String viewSql, String selectSql, List<Object[]> expected)
       throws Exception {
     final SqlCreateProgressiveView view =
         (SqlCreateProgressiveView) SqlParser.create(viewSql, config).parseStmt();
@@ -366,16 +394,8 @@ class JdbcContextFactoryTest {
   }
 
   @Test
-  void testFutureWhereDefault() throws Exception {
-    testFutureWhere(
-        "create progressive view pv as select count(a) from t where (c = 'a') future",
-        "select progressive * from pv",
-        valuesPartition(valuesRow(5.0)));
-  }
-
-  @Test
   void testFutureWhereOne() throws Exception {
-    testFutureWhere(
+    testFuture(
         "create progressive view pv as select count(a) from t where (c = 'a') future",
         "select progressive * from pv with future where c = 'a'",
         valuesPartition(valuesRow(2.0)));
@@ -383,39 +403,55 @@ class JdbcContextFactoryTest {
 
   @Test
   void testFutureWhereTwo() throws Exception {
-    testFutureWhere(
-            "create progressive view pv as select count(a) from t where (c = 'a') future or (c = 'b') future",
-            "select progressive * from pv with future where c = 'a', c = 'b'",
-            valuesPartition(valuesRow(4.0)));
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future or (c = 'b') future",
+        "select progressive * from pv with future where c = 'a', c = 'b'",
+        valuesPartition(valuesRow(4.0)));
   }
 
   @Test
-  void testFutureWhereMixedDefault() throws Exception {
-    testFutureWhere(
-            "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
-            "select progressive * from pv",
-            valuesPartition(valuesRow(3.0)));
+  void testFutureWhereMixedAndDefault() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
+        "select progressive * from pv",
+        valuesPartition(valuesRow(3.0)));
   }
 
   @Test
-  void testFutureWhereMixedOne() throws Exception {
-    testFutureWhere(
-            "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
-            "select progressive * from pv with future where c = 'a'",
-            valuesPartition(valuesRow(1.0)));
+  void testFutureWhereMixedAndOne() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
+        "select progressive * from pv with future where c = 'a'",
+        valuesPartition(valuesRow(1.0)));
+  }
+
+  @Test
+  void testFutureWhereMixedOrDefault() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future or c = 'b'",
+        "select progressive * from pv",
+        valuesPartition(valuesRow(2.0)));
+  }
+
+  @Test
+  void testFutureWhereMixedOrOne() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future or c = 'b'",
+        "select progressive * from pv with future where c = 'a'",
+        valuesPartition(valuesRow(4.0)));
   }
 
   @Test
   void testFutureWhereGroupDefault() throws Exception {
-    testFutureWhere(
+    testFuture(
         "create progressive view pv as select count(a), c from t where (c = 'a') future group by c",
-        "select progressive * from pv with future where c = 'a'",
+        "select progressive * from pv",
         valuesPartition(valuesRow(2.0, "a"), valuesRow(2.0, "b"), valuesRow(1.0, "c")));
   }
 
   @Test
   void testFutureWhereGroupOne() throws Exception {
-    testFutureWhere(
+    testFuture(
         "create progressive view pv as select count(a), c from t where (c = 'a') future group by c",
         "select progressive * from pv with future where c = 'a'",
         valuesPartition(valuesRow(2.0, "a")));
