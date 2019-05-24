@@ -129,7 +129,8 @@ public class JdbcContextFactory
       final SqlCreateTable createBuffer =
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
       final SqlSelect selectBuffer =
-          getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields);
+          getSelectBuffer(
+              bufferFieldNames, bufferTableName, fieldNames, metaFields, select.getWhere());
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
@@ -202,75 +203,110 @@ public class JdbcContextFactory
 
   private Pair<SqlSelect, List<Integer>> transformSelect(
       JdbcBufferContext context, SqlSelectProgressive select) {
-    if (STAR.equalsDeep(select.getSelectList(), Litmus.IGNORE)) {
-      final List<Integer> indices = new ArrayList<>();
+    final SqlSelect selectBuffer = context.getSelectBuffer();
+    final List<Integer> indices = new ArrayList<>();
+    final List<Integer> futureGroupIndices =
+        getFutureGroupIndices(
+            context::getFieldIndex, context.getMetaFields(), select.getWithFutureGroupBy());
 
-      final List<MetaField> metaFields = context.getMetaFields();
-      for (int i = 0; i < metaFields.size(); i++) {
-        if (metaFields.get(i) != MetaField.FUTURE_GROUP) {
+    final SqlNodeList selectList = SqlNodeList.clone(selectBuffer.getSelectList());
+    final SqlNodeList groups =
+        selectBuffer.getGroup() == null
+            ? new SqlNodeList(SqlParserPos.ZERO)
+            : SqlNodeList.clone(selectBuffer.getGroup());
+
+    final List<MetaField> metaFields = context.getMetaFields();
+    for (int i = 0; i < metaFields.size(); i++) {
+      switch (metaFields.get(i)) {
+        case NONE:
+        case AVG:
+        case COUNT:
+        case SUM:
+        case CONFIDENCE_INTERVAL:
+        case PARTITION:
+        case PROGRESS:
           indices.add(i);
-        }
+          break;
+        case FUTURE_GROUP:
+          if (futureGroupIndices.contains(i)) {
+            indices.add(i);
+            selectList.add(getBufferField(context, i, true));
+          }
+          break;
+        case FUTURE_WHERE:
+          // ignore
+          break;
+        default:
+          throw new IllegalArgumentException("metaField not supported: " + metaFields.get(i));
       }
-
-      return ImmutablePair.of(context.getSelectBuffer(), indices);
-    } else {
-      final SqlNodeList selectList = SqlNodeList.clone(select.getSelectList());
-      final List<Integer> indices =
-          substituteFields(context::getFieldIndex, context.getMetaFields(), selectList);
-      final SqlNodeList groups =
-          getGroupsByFuture(
-              context::getFieldIndex,
-              context.getMetaFields(),
-              select.getWithFutureGroupBy(),
-              select.getGroup());
-
-      return ImmutablePair.of(
-          new SqlSelect(
-              SqlParserPos.ZERO,
-              null,
-              selectList,
-              select.getFrom(),
-              replaceFieldNames(context::getFieldIndex, select.getWhere(), context.getMetaFields()),
-              groups.size() > 0 ? groups : null,
-              null,
-              null,
-              select.getOrderList(),
-              select.getOffset(),
-              select.getFetch()),
-          indices);
     }
+
+    if (select.getWithFutureGroupBy() != null) {
+      for (SqlNode group : select.getWithFutureGroupBy()) {
+        groups.add(getBufferField(context, (SqlIdentifier) group, false));
+      }
+    }
+
+    final SqlSelect viewSelect =
+        new SqlSelect(
+            SqlParserPos.ZERO,
+            null,
+            selectList,
+            select.getFrom(),
+            null,
+            groups.size() > 0 ? groups : null,
+            null,
+            null,
+            null,
+            null,
+            null);
+
+    return ImmutablePair.of(
+        new SqlSelect(
+            SqlParserPos.ZERO,
+            null,
+            select.getSelectList(),
+            SqlUtils.getAlias(viewSelect, (SqlIdentifier) select.getFrom()),
+            select.getWhere(),
+            select.getGroup(),
+            select.getHaving(),
+            null,
+            select.getOrderList(),
+            select.getOffset(),
+            select.getFetch()),
+        indices);
   }
 
-  private SqlNodeList getGroupsByFuture(
+  private List<Integer> getFutureGroupIndices(
       Function<SqlIdentifier, Integer> fieldMapper,
       List<MetaField> metaFields,
-      SqlNodeList withFutureGroupBy,
-      SqlNodeList groupBy) {
-    final SqlNodeList groups = new SqlNodeList(SqlParserPos.ZERO);
+      SqlNodeList withFutureGroupBy) {
+    final List<Integer> indices = new ArrayList<>();
 
     if (withFutureGroupBy != null) {
       for (SqlNode group : withFutureGroupBy) {
-        final Triple<SqlIdentifier, Integer, MetaField> field =
-            getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE_GROUP));
-
-        groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
+        final int index =
+            getField(fieldMapper, group, metaFields, EnumSet.of(MetaField.FUTURE_GROUP))
+                .getMiddle();
+        indices.add(index);
       }
     }
 
-    if (groupBy != null) {
-      for (SqlNode group : groupBy) {
-        final Triple<SqlIdentifier, Integer, MetaField> field =
-            getField(
-                fieldMapper,
-                group,
-                metaFields,
-                EnumSet.complementOf(EnumSet.of(MetaField.FUTURE_GROUP)));
+    return indices;
+  }
 
-        groups.add(SqlUtils.getIdentifier(getBufferFieldName(field.getMiddle(), field.getRight())));
-      }
+  private SqlNode getBufferField(JdbcBufferContext context, SqlIdentifier field, boolean addAlias) {
+    final int index = context.getFieldIndex(field);
+    return getBufferField(context, index, addAlias);
+  }
+
+  private SqlNode getBufferField(JdbcBufferContext context, int index, boolean addAlias) {
+    final String fieldName = getBufferFieldName(index, context.getMetaFields().get(index));
+    SqlNode node = SqlUtils.getIdentifier(fieldName);
+    if (addAlias) {
+      node = SqlUtils.getAlias(node, context.getFieldName(index));
     }
-
-    return groups;
+    return node;
   }
 
   private Triple<SqlIdentifier, Integer, MetaField> getField(
@@ -516,6 +552,15 @@ public class JdbcContextFactory
       String bufferTableName,
       List<SqlIdentifier> fieldNames,
       List<MetaField> metaFields) {
+    return getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields, null);
+  }
+
+  private SqlSelect getSelectBuffer(
+      List<String> bufferFieldNames,
+      String bufferTableName,
+      List<SqlIdentifier> fieldNames,
+      List<MetaField> metaFields,
+      SqlNode where) {
     final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
     final SqlNodeList groupBy = new SqlNodeList(SqlParserPos.ZERO);
 

@@ -258,10 +258,10 @@ public abstract class BaseContextFactory<
       return null;
     }
 
-    return get(futures, oldWhere, false, false);
+    return resolveWhereFutures(futures, oldWhere, false, false);
   }
 
-  private SqlBasicCall get(List<SqlNode> futures, SqlNode node, boolean add, boolean inFuture) {
+  private SqlBasicCall resolveWhereFutures(List<SqlNode> futures, SqlNode node, boolean add, boolean inFuture) {
     if (node instanceof SqlFutureNode) {
       if (inFuture) {
         throw new IllegalArgumentException("future nodes must not be nested");
@@ -280,8 +280,8 @@ public abstract class BaseContextFactory<
           boolean rightFuture = isFullFuture(call.getOperands()[1]);
           boolean reverse = add && leftFuture && rightFuture;
 
-          final SqlBasicCall left = get(futures, call.getOperands()[0], reverse, inFuture);
-          final SqlBasicCall right = get(futures, call.getOperands()[1], reverse, inFuture);
+          final SqlBasicCall left = resolveWhereFutures(futures, call.getOperands()[0], reverse, inFuture);
+          final SqlBasicCall right = resolveWhereFutures(futures, call.getOperands()[1], reverse, inFuture);
 
           if (left == null) {
             return right;
@@ -300,8 +300,8 @@ public abstract class BaseContextFactory<
           boolean rightFuture = isFullFuture(call.getOperands()[1]);
           boolean newAdd = add || (leftFuture ^ rightFuture);
 
-          final SqlBasicCall left = get(futures, call.getOperands()[0], newAdd, inFuture);
-          final SqlBasicCall right = get(futures, call.getOperands()[1], newAdd, inFuture);
+          final SqlBasicCall left = resolveWhereFutures(futures, call.getOperands()[0], newAdd, inFuture);
+          final SqlBasicCall right = resolveWhereFutures(futures, call.getOperands()[1], newAdd, inFuture);
 
           if (left == null) {
             return right;
@@ -321,7 +321,7 @@ public abstract class BaseContextFactory<
     return null;
   }
 
-  private boolean isFullFuture(SqlNode node) {
+  protected final boolean isFullFuture(SqlNode node) {
     if (node instanceof SqlFutureNode) {
       return true;
     } else if (node instanceof SqlBasicCall) {

@@ -32,6 +32,10 @@ public class JdbcBufferContext extends JdbcSourceContext {
     return fieldNames;
   }
 
+  public SqlIdentifier getFieldName(int index) {
+    return fieldNames.get(index);
+  }
+
   public int getFieldIndex(SqlIdentifier fieldName) {
     return ContextUtils.getFieldIndex(fieldNames, fieldName);
   }

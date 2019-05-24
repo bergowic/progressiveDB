@@ -268,6 +268,14 @@ public class SqlUtils {
         SqlParserPos.ZERO);
   }
 
+  public static SqlNode getAlias(String node, String alias) {
+    return getAlias(getIdentifier(node), getIdentifier(alias));
+  }
+
+  public static SqlNode getAlias(String node, SqlIdentifier alias) {
+    return getAlias(getIdentifier(node), alias);
+  }
+
   public static SqlNode getAlias(SqlNode node, String alias) {
     return getAlias(node, getIdentifier(alias));
   }

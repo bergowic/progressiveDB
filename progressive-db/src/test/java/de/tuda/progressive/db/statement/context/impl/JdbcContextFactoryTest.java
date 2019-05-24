@@ -326,7 +326,13 @@ class JdbcContextFactoryTest {
       final SqlSelectProgressive select =
           (SqlSelectProgressive) SqlParser.create(selectViewSql, config).parseQuery();
 
-      assertThrows(Throwable.class, () -> contextFactory.create(viewDataBuffer, select, null));
+      final JdbcSourceContext selectContext = contextFactory.create(viewDataBuffer, select, null);
+
+      try (Statement statement = bufferConnection.createStatement()) {
+        assertThrows(
+            SQLException.class,
+            () -> statement.execute(driver.toSql(selectContext.getSelectSource())));
+      }
     }
   }
 
@@ -338,17 +344,13 @@ class JdbcContextFactoryTest {
         valuesPartition(valuesRow(5.0)));
   }
 
-    @Test
-    void testFutureGroupByOne() throws Exception {
-        testFuture(
-                "create progressive view pv as select count(a), c future from t group by c future",
-                "select progressive * from pv with future group by c",
-                valuesPartition(
-                        valuesRow(2.0, "a"),
-                        valuesRow(2.0, "b"),
-                        valuesRow(1.0, "c")
-                ));
-    }
+  @Test
+  void testFutureGroupByOne() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a), c future from t group by c future",
+        "select progressive * from pv with future group by c",
+        valuesPartition(valuesRow(2.0, "a"), valuesRow(2.0, "b"), valuesRow(1.0, "c")));
+  }
 
   @Test
   void testFutureWhereDefault() throws Exception {
