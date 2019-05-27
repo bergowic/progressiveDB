@@ -33,4 +33,9 @@ public class SqlFutureNode extends SqlNodeList {
   public SqlNode getNode() {
     return getList().get(0);
   }
+
+  @Override
+  public SqlNodeList clone(SqlParserPos pos) {
+    return new SqlFutureNode(getList().get(0), hideParens, pos);
+  }
 }
