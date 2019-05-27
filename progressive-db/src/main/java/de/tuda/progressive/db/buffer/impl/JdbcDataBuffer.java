@@ -16,7 +16,12 @@ public class JdbcDataBuffer extends JdbcSelectDataBuffer<JdbcSelectContext>
   private final PreparedStatement updateBuffer;
 
   public JdbcDataBuffer(DbDriver driver, Connection connection, JdbcSelectContext context) {
-    super(driver, connection, context, context.getSelectBuffer());
+    this(driver, connection, context, true);
+  }
+
+  public JdbcDataBuffer(
+      DbDriver driver, Connection connection, JdbcSelectContext context, boolean prepareSelect) {
+    super(driver, connection, context, prepareSelect ? context.getSelectBuffer() : null);
 
     this.insertBuffer = prepare(context.getInsertBuffer());
     this.updateBuffer = prepare(context.getUpdateBuffer());
