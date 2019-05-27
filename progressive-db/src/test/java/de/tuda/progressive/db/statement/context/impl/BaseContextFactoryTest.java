@@ -25,6 +25,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.IntStream;
@@ -57,11 +58,17 @@ class BaseContextFactoryTest {
     SqlUtils.closeSafe(connection);
   }
 
-  private void test(String futureWhere, String sourceWhere) throws Exception {
-    test(futureWhere, sourceWhere, false);
+  private void test(String futureWhere, String sourceWhere, List<String> columns) throws Exception {
+    test(futureWhere, sourceWhere, columns, false);
   }
 
-  private void test(String futureWhere, String sourceWhere, boolean aggregation) throws Exception {
+  private void test(String futureWhere, String sourceWhere) throws Exception {
+    test(futureWhere, sourceWhere, null, false);
+  }
+
+  private void test(
+      String futureWhere, String sourceWhere, List<String> columns, boolean aggregation)
+      throws Exception {
     final SqlCreateProgressiveView view =
         (SqlCreateProgressiveView)
             SqlParser.create(
@@ -76,7 +83,10 @@ class BaseContextFactoryTest {
     final SqlIdentifier zColumn = SqlUtils.getIdentifier("z");
     final SqlNodeList selectList =
         SqlNodeList.of(aggregation ? SqlUtils.createSumAggregation(zColumn) : zColumn);
-    final List<SqlNode> futureColumns = getFutureColumns(((SqlSelect) view.getQuery()).getWhere());
+    final List<SqlNode> futureColumns =
+        columns == null
+            ? getFutureColumns(((SqlSelect) view.getQuery()).getWhere())
+            : getFutureColumns(columns);
     futureColumns.forEach(selectList::add);
 
     final SqlSelect select =
@@ -96,11 +106,21 @@ class BaseContextFactoryTest {
     assertTrue(select.equalsDeep(context.getSelectSource(), Litmus.THROW));
   }
 
+  private List<SqlNode> getFutureColumns(List<String> selectList) throws Exception {
+    final String sql = String.format("select %s from t", String.join(", ", selectList));
+    final SqlSelect select = (SqlSelect) SqlParser.create(sql, config).parseQuery();
+    final List<SqlNode> columns = new ArrayList<>();
+    for (int i = 0; i < select.getSelectList().size(); i++) {
+      columns.add(createField(i + 1, select.getSelectList().get(i)));
+    }
+    return columns;
+  }
+
   private List<SqlNode> getFutureColumns(SqlNode where) {
     final List<SqlNode> futures = getFutures(where);
     final List<SqlNode> columns = new ArrayList<>(futures.size());
     for (int i = 0; i < futures.size(); i++) {
-      columns.add(createField(i, futures.get(i)));
+      columns.add(createField(i + 1, futures.get(i)));
     }
     return columns;
   }
@@ -119,7 +139,7 @@ class BaseContextFactoryTest {
       return null;
     }
     final SqlNodeList groupBy = new SqlNodeList(SqlParserPos.ZERO);
-    IntStream.range(0, futures)
+    IntStream.range(1, futures + 1)
         .mapToObj(BaseContextFactoryTest::getFutureColumnName)
         .forEach(groupBy::add);
     return groupBy;
@@ -168,7 +188,7 @@ class BaseContextFactoryTest {
 
   @Test
   void testFutureWhereOneMixedOr() throws Exception {
-    test("(a = 1) future or b = 1", "a = 1 or b = 1");
+    test("(a = 1) future or b = 1", "a = 1 or b = 1", Arrays.asList("a = 1", "b = 1"));
   }
 
   @Test
@@ -178,7 +198,10 @@ class BaseContextFactoryTest {
 
   @Test
   void testFutureWhereTwoMixedReverse() throws Exception {
-    test("((a = 1) future and (a = 2) future) or b = 1", "a = 1 or a = 2 or b = 1");
+    test(
+        "((a = 1) future and (a = 2) future) or b = 1",
+        "a = 1 or a = 2 or b = 1",
+        Arrays.asList("a = 1", "a = 2", "b = 1"));
   }
 
   @Test
@@ -205,19 +228,23 @@ class BaseContextFactoryTest {
 
   @Test
   void testFutureWhereOrMixed() throws Exception {
-    test("((a = 1) future or (a = 2)) and b = 1", "(a = 1 or a = 2) and b = 1");
+    test(
+        "((a = 1) future or (a = 2)) and b = 1",
+        "(a = 1 or a = 2) and b = 1",
+        Arrays.asList("a = 1", "a = 2"));
   }
 
   @Test
   void testFutureWhereDeepOrMixed() throws Exception {
     test(
         "((a = 1) future or (a = 2) future or (a = 3)) and b = 1",
-        "(a = 1 or a = 2 or a = 3) and b = 1");
+        "(a = 1 or a = 2 or a = 3) and b = 1",
+        Arrays.asList("a = 1", "a = 2", "a = 3"));
   }
 
   @Test
   void testFutureWhereAggregation() throws Exception {
-    test("(a = 1) future", null, true);
+    test("(a = 1) future", null, null, true);
   }
 
   @Test
@@ -262,8 +289,8 @@ class BaseContextFactoryTest {
     }
 
     @Override
-    protected SqlIdentifier getFutureWhereName(int index) {
-      return getFutureColumnName(index);
+    protected String getMetaFieldName(int index, MetaField metaField) {
+      return getFutureColumnName(index).getSimple();
     }
   }
 }

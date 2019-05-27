@@ -181,10 +181,12 @@ public abstract class BaseContextFactory<
 
     final List<SqlNode> futures = new ArrayList<>();
     final SqlBasicCall where = createWhere(futures, select.getWhere());
+    final int metaFieldsSize = metaFields.size();
 
     boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     for (int i = 0; i < futures.size(); i++) {
-      final SqlIdentifier name = getFutureWhereName(i);
+      final SqlIdentifier name =
+          SqlUtils.getIdentifier(getMetaFieldName(metaFieldsSize + i, MetaField.FUTURE_WHERE));
       metaFields.add(MetaField.FUTURE_WHERE);
       selectList.add(
           SqlUtils.getAlias(SqlUtils.createCast(futures.get(i), SqlTypeName.INTEGER), name));
@@ -261,7 +263,8 @@ public abstract class BaseContextFactory<
     return resolveWhereFutures(futures, oldWhere, false, false);
   }
 
-  private SqlBasicCall resolveWhereFutures(List<SqlNode> futures, SqlNode node, boolean add, boolean inFuture) {
+  private SqlBasicCall resolveWhereFutures(
+      List<SqlNode> futures, SqlNode node, boolean add, boolean inFuture) {
     if (node instanceof SqlFutureNode) {
       if (inFuture) {
         throw new IllegalArgumentException("future nodes must not be nested");
@@ -276,12 +279,14 @@ public abstract class BaseContextFactory<
     switch (call.getOperator().getName()) {
       case "AND":
         {
-          boolean leftFuture = isFullFuture(call.getOperands()[0]);
-          boolean rightFuture = isFullFuture(call.getOperands()[1]);
-          boolean reverse = add && leftFuture && rightFuture;
+          FutureType leftFuture = getFutureType(call.getOperands()[0]);
+          FutureType rightFuture = getFutureType(call.getOperands()[1]);
+          boolean reverse = add && leftFuture == FutureType.FULL && rightFuture == FutureType.FULL;
 
-          final SqlBasicCall left = resolveWhereFutures(futures, call.getOperands()[0], reverse, inFuture);
-          final SqlBasicCall right = resolveWhereFutures(futures, call.getOperands()[1], reverse, inFuture);
+          final SqlBasicCall left =
+              resolveWhereFutures(futures, call.getOperands()[0], reverse, inFuture);
+          final SqlBasicCall right =
+              resolveWhereFutures(futures, call.getOperands()[1], reverse, inFuture);
 
           if (left == null) {
             return right;
@@ -296,12 +301,23 @@ public abstract class BaseContextFactory<
         }
       case "OR":
         {
-          boolean leftFuture = isFullFuture(call.getOperands()[0]);
-          boolean rightFuture = isFullFuture(call.getOperands()[1]);
-          boolean newAdd = add || (leftFuture ^ rightFuture);
+          FutureType leftFuture = getFutureType(call.getOperands()[0]);
+          FutureType rightFuture = getFutureType(call.getOperands()[1]);
+          boolean newAdd = add || (leftFuture == FutureType.FULL ^ rightFuture == FutureType.FULL);
 
-          final SqlBasicCall left = resolveWhereFutures(futures, call.getOperands()[0], newAdd, inFuture);
-          final SqlBasicCall right = resolveWhereFutures(futures, call.getOperands()[1], newAdd, inFuture);
+          final SqlBasicCall left =
+              resolveWhereFutures(futures, call.getOperands()[0], newAdd, inFuture);
+
+          if (leftFuture == FutureType.NONE && rightFuture == FutureType.FULL) {
+            futures.add(left);
+          }
+
+          final SqlBasicCall right =
+              resolveWhereFutures(futures, call.getOperands()[1], newAdd, inFuture);
+
+          if (leftFuture == FutureType.FULL && rightFuture == FutureType.NONE) {
+            futures.add(right);
+          }
 
           if (left == null) {
             return right;
@@ -321,24 +337,42 @@ public abstract class BaseContextFactory<
     return null;
   }
 
-  protected final boolean isFullFuture(SqlNode node) {
+  protected final FutureType getFutureType(SqlNode node) {
     if (node instanceof SqlFutureNode) {
-      return true;
+      return FutureType.FULL;
     } else if (node instanceof SqlBasicCall) {
       final SqlBasicCall call = (SqlBasicCall) node;
       switch (call.getOperator().getName().toUpperCase()) {
         case "AND":
         case "OR":
-          return isFullFuture(call.getOperands()[0]) && isFullFuture(call.getOperands()[1]);
+          final FutureType leftFuture = getFutureType(call.getOperands()[0]);
+          final FutureType rightFuture = getFutureType(call.getOperands()[1]);
+          if (leftFuture == FutureType.NONE && rightFuture == FutureType.NONE) {
+            return FutureType.NONE;
+          } else if (leftFuture == FutureType.FULL && rightFuture == FutureType.FULL) {
+            return FutureType.FULL;
+          } else {
+            return FutureType.MIXED;
+          }
         default:
-          return false;
+          return FutureType.NONE;
       }
     } else {
       throw new IllegalArgumentException("node type not expected: " + node);
     }
   }
 
-  protected SqlIdentifier getFutureWhereName(int index) {
-    return SqlUtils.getIdentifier(String.format("FUTURE_WHERE_%d", index));
+  protected String getMetaFieldName(int index, MetaField metaField) {
+    if (metaField == MetaField.NONE) {
+      return String.format("f%d", index);
+    } else {
+      return String.format("f%d_%s", index, metaField.name());
+    }
+  }
+
+  protected enum FutureType {
+    NONE,
+    MIXED,
+    FULL
   }
 }
