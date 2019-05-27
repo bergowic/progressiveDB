@@ -18,6 +18,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
+import org.apache.calcite.util.Litmus;
 
 import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
@@ -282,5 +283,14 @@ public class SqlUtils {
 
   public static SqlNode getAlias(SqlNode node, SqlIdentifier alias) {
     return new SqlBasicCall(SqlStdOperatorTable.AS, new SqlNode[] {node, alias}, SqlParserPos.ZERO);
+  }
+
+  public static boolean contains(SqlNodeList list, SqlNode node) {
+    for (SqlNode element : list) {
+      if (node.equalsDeep(element, Litmus.IGNORE)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
