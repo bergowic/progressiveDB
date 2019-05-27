@@ -366,7 +366,7 @@ class JdbcContextFactoryTest {
         (SqlCreateProgressiveView) SqlParser.create(viewSql, config).parseStmt();
     final JdbcSelectContext viewContext = contextFactory.create(sourceConnection, view, null);
     final JdbcDataBuffer viewDataBuffer =
-        new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, viewContext);
+        new JdbcDataBuffer(SQLiteDriver.INSTANCE, bufferConnection, viewContext, false);
 
     try (Statement statement = sourceConnection.createStatement()) {
       for (int i = 0; i < 2; i++) {

@@ -18,7 +18,6 @@ import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.calcite.util.Litmus;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Pair;
@@ -35,8 +34,6 @@ import java.util.stream.IntStream;
 
 public class JdbcContextFactory
     extends BaseContextFactory<JdbcSelectContext, JdbcSourceContext, JdbcDataBuffer> {
-
-  private static final SqlNodeList STAR = SqlNodeList.of(SqlIdentifier.star(SqlParserPos.ZERO));
 
   private final DbDriver bufferDriver;
 
@@ -253,7 +250,7 @@ public class JdbcContextFactory
             null,
             selectList,
             select.getFrom(),
-            null,
+            activateFutures(metaFields, select.getWithFutureWhere(), selectBuffer.getWhere()),
             groups.size() > 0 ? groups : null,
             null,
             null,
@@ -275,6 +272,72 @@ public class JdbcContextFactory
             select.getOffset(),
             select.getFetch()),
         indices);
+  }
+
+  private SqlNode activateFutures(List<MetaField> metaFields, SqlNodeList futures, SqlNode node) {
+    if (node == null) {
+      return null;
+    }
+    if (futures == null) {
+      futures = SqlNodeList.EMPTY;
+    }
+
+    int index;
+    for (index = 0; index < metaFields.size(); index++) {
+      if (metaFields.get(index) == MetaField.FUTURE_WHERE) {
+        break;
+      }
+    }
+
+    final Pair<SqlNode, Integer> result = activateFutures(futures, node, index);
+    return result.getLeft();
+  }
+
+  private Pair<SqlNode, Integer> activateFutures(SqlNodeList futures, SqlNode node, int index) {
+    if (node instanceof SqlFutureNode) {
+      final SqlNode innerNode = ((SqlFutureNode) node).getNode();
+      if (SqlUtils.contains(futures, innerNode)) {
+        return activateFutures(futures, innerNode, index);
+      } else {
+        return ImmutablePair.of(null, index);
+      }
+    } else if (node instanceof SqlBasicCall) {
+      final SqlBasicCall call = (SqlBasicCall) node;
+      switch (call.getOperator().getName().toUpperCase()) {
+        case "AND":
+        case "OR":
+          final Pair<SqlNode, Integer> left =
+              activateFutures(futures, call.getOperands()[0], index);
+          final Pair<SqlNode, Integer> right =
+              activateFutures(futures, call.getOperands()[1], left.getRight());
+          final int newIndex = Math.max(left.getRight(), right.getRight());
+
+          if (left.getLeft() == null) {
+            return ImmutablePair.of(right.getLeft(), newIndex);
+          } else if (right.getLeft() == null) {
+            return ImmutablePair.of(left.getLeft(), newIndex);
+          } else {
+            return ImmutablePair.of(
+                new SqlBasicCall(
+                    call.getOperator(),
+                    new SqlNode[] {left.getLeft(), right.getLeft()},
+                    SqlParserPos.ZERO),
+                newIndex);
+          }
+        default:
+          return ImmutablePair.of(
+              new SqlBasicCall(
+                  SqlStdOperatorTable.EQUALS,
+                  new SqlNode[] {
+                    SqlUtils.getIdentifier(getMetaFieldName(index, MetaField.FUTURE_WHERE)),
+                    SqlLiteral.createExactNumeric("1", SqlParserPos.ZERO)
+                  },
+                  SqlParserPos.ZERO),
+              index + 1);
+      }
+    } else {
+      throw new IllegalArgumentException("type not supported: " + node);
+    }
   }
 
   private List<Integer> getFutureGroupIndices(
@@ -301,7 +364,7 @@ public class JdbcContextFactory
   }
 
   private SqlNode getBufferField(JdbcBufferContext context, int index, boolean addAlias) {
-    final String fieldName = getBufferFieldName(index, context.getMetaFields().get(index));
+    final String fieldName = getMetaFieldName(index, context.getMetaFields().get(index));
     SqlNode node = SqlUtils.getIdentifier(fieldName);
     if (addAlias) {
       node = SqlUtils.getAlias(node, context.getFieldName(index));
@@ -332,124 +395,6 @@ public class JdbcContextFactory
     }
 
     return ImmutableTriple.of((SqlIdentifier) node, index, metaField);
-  }
-
-  private SqlNode replaceFieldNames(
-      Function<SqlIdentifier, Integer> fieldMapper, SqlNode node, List<MetaField> metaFields) {
-    if (node == null) {
-      return null;
-    }
-
-    if (node instanceof SqlNodeList) {
-      final SqlNodeList nodes = (SqlNodeList) node;
-      for (int i = 0; i < nodes.size(); i++) {
-        final Pair<SqlNode, List<Integer>> substituted =
-            substituteFields(
-                fieldMapper,
-                metaFields,
-                nodes.get(i),
-                true,
-                EnumSet.of(MetaField.NONE, MetaField.FUTURE_GROUP));
-
-        nodes.set(i, substituted.getLeft());
-      }
-      return nodes;
-    }
-
-    return substituteFields(
-            fieldMapper, metaFields, node, true, EnumSet.of(MetaField.NONE, MetaField.FUTURE_GROUP))
-        .getLeft();
-  }
-
-  private List<Integer> substituteFields(
-      Function<SqlIdentifier, Integer> fieldMapper,
-      List<MetaField> metaFields,
-      SqlNodeList selectList) {
-    final List<Integer> indices = new ArrayList<>();
-
-    for (int i = 0; i < selectList.size(); i++) {
-      final Pair<SqlNode, List<Integer>> substituted =
-          substituteFields(fieldMapper, metaFields, selectList.get(i), true, null);
-
-      selectList.set(i, substituted.getLeft());
-      indices.addAll(substituted.getRight());
-    }
-
-    return indices;
-  }
-
-  private Pair<SqlNode, List<Integer>> substituteFields(
-      Function<SqlIdentifier, Integer> fieldMapper,
-      List<MetaField> metaFields,
-      SqlNode node,
-      boolean addAlias,
-      EnumSet<MetaField> valid) {
-    final List<Integer> indices = new ArrayList<>();
-
-    if (node instanceof SqlIdentifier) {
-      final Triple<SqlIdentifier, Integer, MetaField> field =
-          getField(fieldMapper, node, metaFields, valid);
-      final SqlIdentifier fieldName = field.getLeft();
-      final int index = field.getMiddle();
-      final MetaField metaField = field.getRight();
-
-      switch (metaField) {
-        case AVG:
-          node =
-              SqlUtils.createAvgAggregation(
-                  SqlUtils.getIdentifier(getBufferFieldName(index, MetaField.SUM)),
-                  SqlUtils.getIdentifier(getBufferFieldName(index, MetaField.COUNT)));
-          break;
-        case COUNT:
-        case SUM:
-          node =
-              SqlUtils.createPercentAggregation(
-                  index, SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
-          break;
-        case FUTURE_GROUP:
-        case NONE:
-          node = SqlUtils.getIdentifier(getBufferFieldName(index, metaField));
-          break;
-        case PROGRESS:
-        case PARTITION:
-          node = new SqlDynamicParam(0, SqlParserPos.ZERO);
-          break;
-        case CONFIDENCE_INTERVAL:
-          node =
-              SqlUtils.createCast(
-                  SqlUtils.getIdentifier(getBufferFieldName(index, metaField)), SqlTypeName.FLOAT);
-          break;
-        default:
-          throw new IllegalArgumentException("metaField not handled: " + metaField);
-      }
-
-      if (addAlias) {
-        node = SqlUtils.getAlias(node, fieldName);
-      }
-
-      indices.add(index);
-    } else if (node instanceof SqlBasicCall) {
-      final SqlBasicCall call = (SqlBasicCall) node;
-
-      if (SqlStdOperatorTable.AS.equals(call.getOperator())) {
-        final Pair<SqlNode, List<Integer>> substituted =
-            substituteFields(fieldMapper, metaFields, call.operand(0), false, valid);
-
-        call.setOperand(0, substituted.getLeft());
-        indices.addAll(substituted.getRight());
-      } else {
-        // TODO check if actually correct
-        final SqlNode[] operands = call.getOperands();
-        for (int i = 0; i < operands.length; i++) {
-          final Pair<SqlNode, List<Integer>> substituted =
-              substituteFields(fieldMapper, metaFields, call.operand(i), false, valid);
-
-          call.setOperand(i, substituted.getLeft());
-        }
-      }
-    }
-
-    return ImmutablePair.of(node, indices);
   }
 
   private List<SqlIdentifier> getFieldNames(SqlNodeList selectList) {
@@ -487,22 +432,22 @@ public class JdbcContextFactory
     for (MetaField metaField : metaFields) {
       switch (metaField) {
         case AVG:
-          fieldNames.add(getBufferFieldName(i, MetaField.SUM));
-          fieldNames.add(getBufferFieldName(i++, MetaField.COUNT));
+          fieldNames.add(getMetaFieldName(i, MetaField.SUM));
+          fieldNames.add(getMetaFieldName(i++, MetaField.COUNT));
           break;
         case NONE:
         case COUNT:
         case SUM:
         case FUTURE_GROUP:
         case FUTURE_WHERE:
-          fieldNames.add(getBufferFieldName(i++, metaField));
+          fieldNames.add(getMetaFieldName(i++, metaField));
           break;
         case PARTITION:
         case PROGRESS:
           i++;
           break;
         case CONFIDENCE_INTERVAL:
-          fieldNames.add(getBufferFieldName(i++, metaField));
+          fieldNames.add(getMetaFieldName(i++, metaField));
           break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);
@@ -510,14 +455,6 @@ public class JdbcContextFactory
     }
 
     return fieldNames;
-  }
-
-  private String getBufferFieldName(int index, MetaField metaField) {
-    if (metaField == MetaField.NONE) {
-      return String.format("f%d", index);
-    } else {
-      return String.format("f%d_%s", index, metaField.name());
-    }
   }
 
   private String generateBufferTableName() {
@@ -620,7 +557,7 @@ public class JdbcContextFactory
         null,
         selectList,
         new SqlIdentifier(bufferTableName, SqlParserPos.ZERO),
-        null,
+        transformWhere(where),
         groupBy.size() == 0 ? null : groupBy,
         null,
         null,
@@ -642,7 +579,7 @@ public class JdbcContextFactory
     for (Integer index : indices) {
       final MetaField metaField = metaFields.get(index);
       if (MetaFieldUtils.isIndex(metaField, hasAggregation)) {
-        indexColumns.add(SqlUtils.getIdentifier(getBufferFieldName(index, metaField)));
+        indexColumns.add(SqlUtils.getIdentifier(getMetaFieldName(index, metaField)));
       }
     }
     return indexColumns;
@@ -756,5 +693,74 @@ public class JdbcContextFactory
         null,
         null,
         null);
+  }
+
+  private SqlNode transformWhere(SqlNode oldWhere) {
+    if (oldWhere == null) {
+      return null;
+    }
+
+    return resolveWhereFutures(oldWhere, false);
+  }
+
+  private SqlNode resolveWhereFutures(SqlNode node, boolean add) {
+    boolean isFuture = false;
+    if (node instanceof SqlFutureNode) {
+      isFuture = true;
+      add = true;
+
+      node = ((SqlFutureNode) node).getNode();
+    }
+
+    final SqlBasicCall call = (SqlBasicCall) node;
+    switch (call.getOperator().getName()) {
+      case "AND":
+        {
+          FutureType leftFuture = getFutureType(call.getOperands()[0]);
+          FutureType rightFuture = getFutureType(call.getOperands()[1]);
+
+          final SqlNode left =
+              resolveWhereFutures(call.getOperands()[0], leftFuture == FutureType.FULL);
+          final SqlNode right =
+              resolveWhereFutures(call.getOperands()[1], rightFuture == FutureType.FULL);
+
+          if (left == null) {
+            return right;
+          } else if (right == null) {
+            return left;
+          } else {
+            return new SqlBasicCall(
+                SqlStdOperatorTable.AND, new SqlNode[] {left, right}, SqlParserPos.ZERO);
+          }
+        }
+      case "OR":
+        {
+          FutureType leftFuture = getFutureType(call.getOperands()[0]);
+          FutureType rightFuture = getFutureType(call.getOperands()[1]);
+          boolean newAdd = leftFuture == FutureType.FULL || rightFuture == FutureType.FULL;
+
+          final SqlNode left = resolveWhereFutures(call.getOperands()[0], newAdd);
+          final SqlNode right = resolveWhereFutures(call.getOperands()[1], newAdd);
+
+          if (left == null) {
+            return right;
+          } else if (right == null) {
+            return left;
+          } else {
+            return new SqlBasicCall(
+                SqlStdOperatorTable.OR, new SqlNode[] {left, right}, SqlParserPos.ZERO);
+          }
+        }
+      default:
+        if (add) {
+          if (isFuture) {
+            return new SqlFutureNode(node, SqlParserPos.ZERO);
+          } else {
+            return call;
+          }
+        }
+    }
+
+    return null;
   }
 }
