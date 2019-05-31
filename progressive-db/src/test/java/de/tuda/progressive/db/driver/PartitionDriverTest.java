@@ -10,17 +10,21 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.Connection;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 public abstract class PartitionDriverTest {
 
-  private static final String TABLE_NAME = "test";
+  private static final String TABLE_NAME = "f";
+  private static final String FOREIGN_TABLE_NAME = "d";
+  private static final char JOIN_COLUMN_NAME = 'b';
+
+  private static final int ENTRY_COUNT = 3;
 
   protected static Connection connection;
 
@@ -29,16 +33,19 @@ public abstract class PartitionDriverTest {
     final PartitionDriver driver = getDriver().build();
 
     try (Statement statement = connection.createStatement()) {
-      for (int i = 0; i < 3; i++) {
+      for (int i = 0; i < ENTRY_COUNT; i++) {
         SqlDropTable dropTable = SqlUtils.dropTable(driver.getPartitionTable(TABLE_NAME, i));
         statement.execute(driver.toSql(dropTable));
       }
 
       statement.execute(driver.toSql(SqlUtils.dropTable(TABLE_NAME)));
-      statement.execute(String.format("create table %s (a integer, b varchar(100))", TABLE_NAME));
-      statement.execute(String.format("insert into %s values (1, 'a')", TABLE_NAME));
-      statement.execute(String.format("insert into %s values (2, 'b')", TABLE_NAME));
-      statement.execute(String.format("insert into %s values (3, 'c')", TABLE_NAME));
+      statement.execute(
+          String.format(
+              "create table %s (a integer, %c varchar(100))", TABLE_NAME, JOIN_COLUMN_NAME));
+      for (int i = 0; i < ENTRY_COUNT; i++) {
+        statement.execute(
+            String.format("insert into %s values (%d, '%c')", TABLE_NAME, i + 1, 'a' + i));
+      }
     }
   }
 
@@ -62,56 +69,79 @@ public abstract class PartitionDriverTest {
 
   @Test
   void testPrepare1() {
-    testPrepare1(false);
+    testPrepare(false, 1, 0);
   }
 
   @Test
   void testPrepare1Partitions() {
-    testPrepare1(true);
-  }
-
-  private void testPrepare1(boolean hasPartitions) {
-    final DbDriver driver = getDriver().partitionSize(1).hasPartitions(hasPartitions).build();
-
-    final MetaData metaData = new MemoryMetaData();
-    driver.prepareTable(connection, TABLE_NAME, metaData);
-    final List<Partition> partitions = metaData.getPartitions(TABLE_NAME);
-
-    assertEquals(3, partitions.size());
-    partitions.forEach(p -> assertEquals(1, p.getEntries()));
-
-    assertColumn(metaData, "a", new Column(TABLE_NAME, "a", 1, 3));
-    assertColumn(metaData, "b", null);
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 1, 0);
+    }
   }
 
   @Test
   void testPrepare2() {
-    testPrepare2(false);
+    testPrepare(false, 2, 0);
   }
 
   @Test
   void testPrepare2Partitions() {
-    testPrepare2(true);
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 2, 0);
+    }
   }
 
-  private void testPrepare2(boolean hasPartitions) {
-    final DbDriver driver = getDriver().partitionSize(2).hasPartitions(hasPartitions).build();
-
-    final MetaData metaData = new MemoryMetaData();
-    driver.prepareTable(connection, TABLE_NAME, metaData);
-    final List<Partition> partitions = metaData.getPartitions(TABLE_NAME);
-
-    assertEquals(2, partitions.size());
-    partitions.sort(Comparator.comparingInt(p -> (int) p.getEntries()));
-    assertEquals(1, partitions.get(0).getEntries());
-    assertEquals(2, partitions.get(1).getEntries());
-
-    assertColumn(metaData, "a", new Column(TABLE_NAME, "a", 1, 3));
-    assertColumn(metaData, "b", null);
+  @Test
+  void testPrepare1Join1() {
+    testPrepare(false, 1, 1);
   }
 
-  private void assertColumn(MetaData metaData, String columnName, Column expected) {
-    final Column column = metaData.getColumn(TABLE_NAME, columnName);
+  @Test
+  void testPrepare1PartitionsJoin1() {
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 1, 1);
+    }
+  }
+
+  @Test
+  void testPrepare2Join1() {
+    testPrepare(false, 2, 1);
+  }
+
+  @Test
+  void testPrepare2PartitionsJoin1() {
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 2, 1);
+    }
+  }
+
+  @Test
+  void testPrepare1Join2() {
+    testPrepare(false, 1, 2);
+  }
+
+  @Test
+  void testPrepare1PartitionsJoin2() {
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 1, 2);
+    }
+  }
+
+  @Test
+  void testPrepare2Join2() {
+    testPrepare(false, 2, 2);
+  }
+
+  @Test
+  void testPrepare2PartitionsJoin2() {
+    if (getDriver().build().hasPartitions()) {
+      testPrepare(true, 2, 2);
+    }
+  }
+
+  private void assertColumn(
+      MetaData metaData, String tableName, String columnName, Column expected) {
+    final Column column = metaData.getColumn(tableName, columnName);
 
     if (expected == null) {
       assertNull(column);
@@ -120,5 +150,85 @@ public abstract class PartitionDriverTest {
       assertEquals(expected.getMin(), column.getMin());
       assertEquals(expected.getMax(), column.getMax());
     }
+  }
+
+  private String createForeignTable(int num) {
+    final DbDriver driver = getDriver().build();
+
+    try (Statement statement = connection.createStatement()) {
+      final String table = String.format("%s_%d", FOREIGN_TABLE_NAME, num);
+
+      statement.execute(driver.toSql(SqlUtils.dropTable(table)));
+      for (int i = 0; i < ENTRY_COUNT; i++) {
+        statement.execute(driver.toSql(SqlUtils.dropTable(driver.getPartitionTable(table, i))));
+      }
+
+      statement.execute(
+          String.format(
+              "create table %s (%s varchar(100), %c integer, primary key (%s))",
+              table, JOIN_COLUMN_NAME, JOIN_COLUMN_NAME + 1, JOIN_COLUMN_NAME));
+
+      try (PreparedStatement insert =
+          connection.prepareStatement(String.format("insert into %s values (?, ?)", table))) {
+        try (ResultSet result =
+            statement.executeQuery(
+                String.format("select %s from %s", JOIN_COLUMN_NAME, TABLE_NAME))) {
+          int counter = 1;
+          while (result.next()) {
+            insert.setString(1, result.getString(1));
+            insert.setInt(2, counter++);
+            assertEquals(1, insert.executeUpdate());
+          }
+        }
+      }
+
+      statement.execute(
+          String.format(
+              "alter table %s add foreign key (%s) references %s(%s)",
+              TABLE_NAME, JOIN_COLUMN_NAME, table, JOIN_COLUMN_NAME));
+
+      return table;
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private List<String> createForeignTables(int count) {
+    return IntStream.range(0, count)
+        .mapToObj(this::createForeignTable)
+        .collect(Collectors.toList());
+  }
+
+  private void testPrepare(boolean hasPartitions, int partitionSize, int joinTables) {
+    final DbDriver driver =
+        getDriver().partitionSize(partitionSize).hasPartitions(hasPartitions).build();
+
+    final List<String> foreignTables = createForeignTables(joinTables);
+
+    final MetaData metaData = new MemoryMetaData();
+    driver.prepareTable(connection, TABLE_NAME, metaData);
+
+    testPrepare(metaData, TABLE_NAME, "a", partitionSize);
+    foreignTables.forEach(
+        table ->
+            testPrepare(
+                metaData, table, String.valueOf((char) (JOIN_COLUMN_NAME + 1)), partitionSize));
+  }
+
+  private void testPrepare(MetaData metaData, String table, String column, int partitionSize) {
+    final List<Partition> partitions = metaData.getPartitions(table);
+    final int partitionCount = (int) Math.ceil((double) ENTRY_COUNT / (double) partitionSize);
+
+    assertEquals(partitionCount, partitions.size());
+    if (partitionSize > 1) {
+      partitions.sort(Comparator.comparingInt(p -> (int) p.getEntries()));
+      assertEquals(1, partitions.get(0).getEntries());
+      assertEquals(2, partitions.get(1).getEntries());
+    } else {
+      partitions.forEach(p -> assertEquals(1, p.getEntries()));
+    }
+
+    assertColumn(metaData, table, column, new Column(table, column, 1, 3));
+    assertColumn(metaData, table, String.valueOf(JOIN_COLUMN_NAME), null);
   }
 }

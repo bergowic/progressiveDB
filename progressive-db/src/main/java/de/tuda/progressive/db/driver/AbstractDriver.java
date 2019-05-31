@@ -13,8 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 public abstract class AbstractDriver implements DbDriver {
 
@@ -46,17 +45,55 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private List<Partition> split(Connection connection, String table) {
-    log.info("get count of partitions of table {} with size {}", table, partitionSize);
-    final int partitionCount = getPartitionCount(connection, table, partitionSize);
+    final List<Partition> partitions = new ArrayList<>();
 
-    log.info("create {} partitions", partitionCount);
-    createPartitions(connection, table, partitionCount);
+    for (Map.Entry<String, Integer> entry : getPartitionSizes(connection, table).entrySet()) {
+      final String currentTable = entry.getKey();
+      final int partitionCount = entry.getValue();
 
-    log.info("insert data");
-    insertData(connection, table, partitionCount);
+      log.info("create {} partitions for table {}", partitionCount, currentTable);
+      createPartitions(connection, currentTable, partitionCount);
 
-    log.info("read meta data");
-    return getPartitions(connection, table, partitionCount);
+      log.info("insert data into table {}", currentTable);
+      insertData(connection, currentTable, partitionCount);
+
+      log.info("read meta data of table {}", currentTable);
+      partitions.addAll(getPartitions(connection, currentTable, partitionCount));
+    }
+
+    return partitions;
+  }
+
+  private SortedMap<String, Integer> getPartitionSizes(Connection connection, String baseTable) {
+    final List<String> foreignTables = getForeignTables(connection, baseTable);
+    final SortedMap<String, Integer> partitionSizes = new TreeMap<>();
+
+    if (partitionSize > 0) {
+      partitionSizes.put(baseTable, getPartitionCount(connection, baseTable, partitionSize));
+
+      for (String foreignTable : foreignTables) {
+        partitionSizes.put(
+            foreignTable, getPartitionCount(connection, foreignTable, partitionSize));
+      }
+    } else {
+      log.info("get count of partitions of table {}", baseTable, partitionSize);
+      throw new UnsupportedOperationException();
+    }
+
+    return partitionSizes;
+  }
+
+  private List<String> getForeignTables(Connection connection, String baseTable) {
+    final List<String> foreignTables = new ArrayList<>();
+    try (ResultSet result = connection.getMetaData().getImportedKeys(null, null, baseTable)) {
+      while (result.next()) {
+        foreignTables.add(result.getString("PKTABLE_NAME"));
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+    return foreignTables;
   }
 
   protected void createPartitions(Connection connection, String table, int partitions) {
@@ -112,11 +149,22 @@ public abstract class AbstractDriver implements DbDriver {
   protected abstract String getSelectTemplate();
 
   private int getPartitionCount(Connection connection, String table, int partitionSize) {
+    log.info("get count of partitions of table {} with size {}", table, partitionSize);
     final long count = getCount(connection, table);
     return (int) Math.ceil(((double) count / (double) partitionSize));
   }
 
-  private List<Column> getColumns(Connection connection, String table) {
+  private List<Column> getColumns(Connection connection, String baseTable) {
+    final List<Column> columns = new ArrayList<>(getColumnsOfTable(connection, baseTable));
+
+    for (String foreignTable : getForeignTables(connection, baseTable)) {
+      columns.addAll(getColumnsOfTable(connection, foreignTable));
+    }
+
+    return columns;
+  }
+
+  private List<Column> getColumnsOfTable(Connection connection, String table) {
     final List<String> columnNames = getColumnNames(connection, table);
 
     try (PreparedStatement statement =
