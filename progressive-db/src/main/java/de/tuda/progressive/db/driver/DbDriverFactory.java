@@ -1,5 +1,9 @@
 package de.tuda.progressive.db.driver;
 
+import de.tuda.progressive.db.driver.impl.MySQLDriver;
+import de.tuda.progressive.db.driver.impl.PostgreSQLDriver;
+import de.tuda.progressive.db.driver.impl.SQLiteDriver;
+
 public class DbDriverFactory {
 
   private static final int PREFIX_LEN = "jdbc:".length();

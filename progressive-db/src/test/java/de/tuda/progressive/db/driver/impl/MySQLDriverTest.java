@@ -1,5 +1,7 @@
-package de.tuda.progressive.db.driver;
+package de.tuda.progressive.db.driver.impl;
 
+import de.tuda.progressive.db.driver.PartitionDriver;
+import de.tuda.progressive.db.driver.PartitionDriverTest;
 import org.junit.jupiter.api.BeforeAll;
 
 import java.sql.DriverManager;

@@ -1,5 +1,6 @@
-package de.tuda.progressive.db.driver;
+package de.tuda.progressive.db.driver.impl;
 
+import de.tuda.progressive.db.driver.PartitionDriver;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;

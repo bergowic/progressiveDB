@@ -2,7 +2,7 @@ package de.tuda.progressive.db.statement.context.impl;
 
 import de.tuda.progressive.db.buffer.impl.JdbcDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
-import de.tuda.progressive.db.driver.SQLiteDriver;
+import de.tuda.progressive.db.driver.impl.SQLiteDriver;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlFutureNode;
