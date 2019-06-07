@@ -65,7 +65,7 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private SortedMap<String, Integer> getPartitionSizes(Connection connection, String baseTable) {
-    final List<String> foreignTables = getForeignTables(connection, baseTable);
+    final Set<String> foreignTables = getForeignTables(connection, baseTable);
     final SortedMap<String, Integer> partitionSizes = new TreeMap<>();
 
     if (partitionSize > 0) {
@@ -83,8 +83,8 @@ public abstract class AbstractDriver implements DbDriver {
     return partitionSizes;
   }
 
-  private List<String> getForeignTables(Connection connection, String baseTable) {
-    final List<String> foreignTables = new ArrayList<>();
+  private Set<String> getForeignTables(Connection connection, String baseTable) {
+    final Set<String> foreignTables = new HashSet<>();
     try (ResultSet result = connection.getMetaData().getImportedKeys(null, null, baseTable)) {
       while (result.next()) {
         foreignTables.add(result.getString("PKTABLE_NAME"));
