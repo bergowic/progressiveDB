@@ -221,16 +221,19 @@ public class ProgressiveMeta extends JdbcMeta {
       return Frame.create(offset, true, Collections.emptyList());
     }
 
-    final int columnCount = resultSet.getMetaData().getColumnCount();
     final List<Object> rows = new ArrayList<>();
 
-    while (resultSet.next()) {
-      Object[] columns = new Object[columnCount];
-      for (int i = 0; i < columnCount; i++) {
-        columns[i] = resultSet.getObject(i + 1);
+    if (resultSet.getMetaData() != null) {
+      final int columnCount = resultSet.getMetaData().getColumnCount();
+
+      while (resultSet.next()) {
+        Object[] columns = new Object[columnCount];
+        for (int i = 0; i < columnCount; i++) {
+          columns[i] = resultSet.getObject(i + 1);
+        }
+        rows.add(columns);
+        offset++;
       }
-      rows.add(columns);
-      offset++;
     }
 
     log.info("send data back");
