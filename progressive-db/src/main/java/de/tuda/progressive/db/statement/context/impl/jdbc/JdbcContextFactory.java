@@ -299,7 +299,7 @@ public class JdbcContextFactory
       if (SqlUtils.contains(futures, innerNode)) {
         return activateFutures(futures, innerNode, index);
       } else {
-        return ImmutablePair.of(null, index);
+        return ImmutablePair.of(null, index + 1);
       }
     } else if (node instanceof SqlBasicCall) {
       final SqlBasicCall call = (SqlBasicCall) node;
