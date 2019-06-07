@@ -76,6 +76,7 @@ public class JdbcContextFactory
           .fieldNames(fieldNames)
           .createBuffer(createBuffer)
           .selectBuffer(selectBuffer)
+          .prepareSelect(true)
           .build();
     } catch (SQLException e) {
       // TODO

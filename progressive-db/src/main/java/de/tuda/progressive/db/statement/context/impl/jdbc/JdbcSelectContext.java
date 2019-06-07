@@ -19,6 +19,8 @@ public class JdbcSelectContext extends JdbcBufferContext {
 
   private final SqlUpdate updateBuffer;
 
+  private final boolean prepareSelect;
+
   public JdbcSelectContext(
       List<MetaField> metaFields,
       Map<Integer, Pair<Integer, Integer>> bounds,
@@ -27,12 +29,14 @@ public class JdbcSelectContext extends JdbcBufferContext {
       SqlCreateTable createBuffer,
       SqlInsert insertBuffer,
       SqlUpdate updateBuffer,
-      SqlSelect selectBuffer) {
+      SqlSelect selectBuffer,
+      boolean prepareSelect) {
     super(metaFields, bounds, selectSource, fieldNames, selectBuffer);
 
     this.createBuffer = createBuffer;
     this.insertBuffer = insertBuffer;
     this.updateBuffer = updateBuffer;
+    this.prepareSelect = prepareSelect;
   }
 
   public SqlCreateTable getCreateBuffer() {
@@ -47,6 +51,10 @@ public class JdbcSelectContext extends JdbcBufferContext {
     return updateBuffer;
   }
 
+  public boolean isPrepareSelect() {
+    return prepareSelect;
+  }
+
   public static final class Builder
       extends JdbcBufferContext.AbstractBuilder<JdbcSelectContext, Builder> {
     private SqlCreateTable createBuffer;
@@ -54,6 +62,8 @@ public class JdbcSelectContext extends JdbcBufferContext {
     private SqlInsert insertBuffer;
 
     private SqlUpdate updateBuffer;
+
+    private boolean prepareSelect;
 
     public Builder createBuffer(SqlCreateTable createBuffer) {
       this.createBuffer = createBuffer;
@@ -67,6 +77,11 @@ public class JdbcSelectContext extends JdbcBufferContext {
 
     public Builder updateBuffer(SqlUpdate updateBuffer) {
       this.updateBuffer = updateBuffer;
+      return this;
+    }
+
+    public Builder prepareSelect(boolean prepareSelect) {
+      this.prepareSelect = prepareSelect;
       return this;
     }
 
@@ -85,7 +100,8 @@ public class JdbcSelectContext extends JdbcBufferContext {
           createBuffer,
           insertBuffer,
           updateBuffer,
-          selectBuffer);
+          selectBuffer,
+          prepareSelect);
     }
   }
 }
