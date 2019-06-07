@@ -10,6 +10,7 @@ import org.apache.calcite.avatica.metrics.MetricsSystem;
 import org.apache.calcite.avatica.metrics.noop.NoopMetricsSystem;
 import org.apache.calcite.avatica.remote.TypedValue;
 import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOrderBy;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.slf4j.Logger;
@@ -243,8 +244,17 @@ public class ProgressiveMeta extends JdbcMeta {
 
   private <T> Optional<T> prepareProgressiveStatement(
       String sql, Function<ProgressiveStatement, T> success) {
-    final SqlNode node = parse(sql);
+    SqlNode node = parse(sql);
     ProgressiveStatement statement;
+
+    if (node instanceof SqlOrderBy) {
+      final SqlOrderBy orderBy = (SqlOrderBy) node;
+      if (orderBy.query instanceof SqlSelectProgressive) {
+        final SqlSelectProgressive select = (SqlSelectProgressive) orderBy.query;
+        select.setOrderBy(orderBy.orderList);
+        node = select;
+      }
+    }
 
     if (node instanceof SqlPrepareTable) {
       statement = progressiveHandler.handle((SqlPrepareTable) node);
