@@ -412,6 +412,14 @@ class JdbcContextFactoryTest {
   }
 
   @Test
+  void testFutureWhereTwoSecond() throws Exception {
+    testFuture(
+        "create progressive view pv as select count(a) from t where (c = 'a') future or (c = 'c') future",
+        "select progressive * from pv with future where c = 'c'",
+        valuesPartition(valuesRow(1.0)));
+  }
+
+  @Test
   void testFutureWhereMixedAndDefault() throws Exception {
     testFuture(
         "create progressive view pv as select count(a) from t where (c = 'a') future and b > 5",
