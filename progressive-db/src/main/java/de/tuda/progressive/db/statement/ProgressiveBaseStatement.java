@@ -154,7 +154,6 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
     SqlUtils.closeSafe(dataBuffer);
     SqlUtils.closeSafe(preparedStatement);
-    SqlUtils.closeSafe(connection);
   }
 
   protected final synchronized int getReadPartitions() {
