@@ -83,16 +83,16 @@ public abstract class AbstractDriverTest<
         statement.execute(driver.toSql(SqlUtils.dropTable(driver.getPartitionTable(table, i))));
       }
 
-      statement.execute(
+      final String sqlCreateTable =
           String.format(
               "create table %s (%s varchar(100), %c integer, primary key (%s))",
-              table, JOIN_COLUMN_NAME, JOIN_COLUMN_NAME + 1, JOIN_COLUMN_NAME));
+              table, JOIN_COLUMN_NAME, JOIN_COLUMN_NAME + 1, JOIN_COLUMN_NAME);
+      statement.execute(sqlCreateTable);
 
       try (PreparedStatement insert =
           connection.prepareStatement(String.format("insert into %s values (?, ?)", table))) {
-        try (ResultSet result =
-            statement.executeQuery(
-                String.format("select %s from %s", JOIN_COLUMN_NAME, TABLE_NAME))) {
+        final String sql = String.format("select %s from %s", JOIN_COLUMN_NAME, TABLE_NAME);
+        try (ResultSet result = statement.executeQuery(sql)) {
           int counter = 1;
           while (result.next()) {
             insert.setString(1, result.getString(1));
@@ -102,10 +102,11 @@ public abstract class AbstractDriverTest<
         }
       }
 
-      statement.execute(
+      final String sqlAlterTable =
           String.format(
               "alter table %s add foreign key (%s) references %s(%s)",
-              TABLE_NAME, JOIN_COLUMN_NAME, table, JOIN_COLUMN_NAME));
+              TABLE_NAME, JOIN_COLUMN_NAME, table, JOIN_COLUMN_NAME);
+      statement.execute(sqlAlterTable);
 
       return table;
     } catch (SQLException e) {

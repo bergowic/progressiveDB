@@ -30,8 +30,9 @@ public class JdbcSelectContext extends JdbcBufferContext {
       SqlInsert insertBuffer,
       SqlUpdate updateBuffer,
       SqlSelect selectBuffer,
+      List<SqlIdentifier> sourceTables,
       boolean prepareSelect) {
-    super(metaFields, bounds, selectSource, fieldNames, selectBuffer);
+    super(metaFields, bounds, selectSource, fieldNames, selectBuffer, sourceTables);
 
     this.createBuffer = createBuffer;
     this.insertBuffer = insertBuffer;
@@ -91,7 +92,8 @@ public class JdbcSelectContext extends JdbcBufferContext {
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<SqlIdentifier> fieldNames,
-        SqlSelect selectBuffer) {
+        SqlSelect selectBuffer,
+        List<SqlIdentifier> sourceTables) {
       return new JdbcSelectContext(
           metaFields,
           bounds,
@@ -101,6 +103,7 @@ public class JdbcSelectContext extends JdbcBufferContext {
           insertBuffer,
           updateBuffer,
           selectBuffer,
+          sourceTables,
           prepareSelect);
     }
   }

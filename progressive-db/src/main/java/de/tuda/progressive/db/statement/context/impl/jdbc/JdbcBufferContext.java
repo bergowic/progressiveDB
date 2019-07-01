@@ -21,8 +21,9 @@ public class JdbcBufferContext extends JdbcSourceContext {
       Map<Integer, Pair<Integer, Integer>> bounds,
       SqlSelect selectSource,
       List<SqlIdentifier> fieldNames,
-      SqlSelect selectBuffer) {
-    super(metaFields, bounds, selectSource);
+      SqlSelect selectBuffer,
+      List<SqlIdentifier> sourceTables) {
+    super(metaFields, bounds, selectSource, sourceTables);
 
     this.fieldNames = fieldNames;
     this.selectBuffer = selectBuffer;
@@ -66,8 +67,9 @@ public class JdbcBufferContext extends JdbcSourceContext {
     protected final C build(
         List<MetaField> metaFields,
         Map<Integer, Pair<Integer, Integer>> bounds,
-        SqlSelect selectSource) {
-      return build(metaFields, bounds, selectSource, fieldNames, selectBuffer);
+        SqlSelect selectSource,
+        List<SqlIdentifier> sourceTables) {
+      return build(metaFields, bounds, selectSource, fieldNames, selectBuffer, sourceTables);
     }
 
     protected abstract C build(
@@ -75,7 +77,8 @@ public class JdbcBufferContext extends JdbcSourceContext {
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<SqlIdentifier> fieldNames,
-        SqlSelect selectBuffer);
+        SqlSelect selectBuffer,
+        List<SqlIdentifier> sourceTables);
   }
 
   public static class Builder extends AbstractBuilder<JdbcBufferContext, Builder> {
@@ -85,8 +88,10 @@ public class JdbcBufferContext extends JdbcSourceContext {
         Map<Integer, Pair<Integer, Integer>> bounds,
         SqlSelect selectSource,
         List<SqlIdentifier> fieldNames,
-        SqlSelect selectBuffer) {
-      return new JdbcBufferContext(metaFields, bounds, selectSource, fieldNames, selectBuffer);
+        SqlSelect selectBuffer,
+        List<SqlIdentifier> sourceTables) {
+      return new JdbcBufferContext(
+          metaFields, bounds, selectSource, fieldNames, selectBuffer, sourceTables);
     }
   }
 }

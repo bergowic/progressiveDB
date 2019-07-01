@@ -7,14 +7,17 @@ import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
+import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlJoin;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlSelect;
+import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +26,7 @@ import java.sql.Connection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.function.Function;
 
 public class SimpleStatementFactory implements ProgressiveStatementFactory {
@@ -64,11 +68,11 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
     if (viewStatement == null) {
       log.info("no view found");
 
-      final List<Partition> partitions = getPartitions(select);
+      final PartitionInfo partitionInfo = getJoinInfo(select);
       final JdbcSourceContext context = contextFactory.create(connection, select, columnMapper);
       final DataBuffer dataBuffer = dataBufferFactory.create(context);
 
-      return new ProgressiveSelectStatement(driver, connection, context, dataBuffer, partitions);
+      return new ProgressiveSelectStatement(driver, connection, context, dataBuffer, partitionInfo);
     } else {
       log.info("view found");
 
@@ -107,21 +111,55 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
   }
 
   private ProgressiveViewStatement getProgressiveView(SqlSelect select) {
+    if (!(select.getFrom() instanceof SqlIdentifier)) {
+      return null;
+    }
+
     final SqlIdentifier from = (SqlIdentifier) select.getFrom();
     return viewStatements.get(from.getSimple().toUpperCase());
   }
 
-  private List<Partition> getPartitions(SqlSelect select) {
-    final SqlIdentifier from = (SqlIdentifier) select.getFrom();
-    return metaData.getPartitions(from.getSimple());
+  private PartitionInfo getJoinInfo(SqlSelect select) {
+    final Map<String, List<Partition>> partitions = new HashMap<>();
+    addPartitions(partitions, select.getFrom());
+    return new PartitionInfo(getFactTable(partitions), partitions);
+  }
+
+  private void addPartitions(Map<String, List<Partition>> partitions, SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      final String name = ((SqlIdentifier) node).getSimple();
+      partitions.putIfAbsent(name, metaData.getPartitions(name));
+    } else if (node instanceof SqlJoin) {
+      final SqlJoin join = (SqlJoin) node;
+      addPartitions(partitions, join.getLeft());
+      addPartitions(partitions, join.getRight());
+    }
+  }
+
+  private String getFactTable(Map<String, List<Partition>> partitions) {
+    Optional<String> result =
+        partitions.entrySet().stream()
+            .map(
+                entry ->
+                    ImmutablePair.of(
+                        entry.getKey(), entry.getValue().stream().anyMatch(Partition::isFact)))
+            .filter(Pair::getValue)
+            .map(Pair::getKey)
+            .findFirst();
+
+    if (!result.isPresent()) {
+      throw new IllegalArgumentException("no fact table found");
+    }
+
+    return result.get();
   }
 
   private ProgressiveViewStatement addViewStatement(
       Connection connection, JdbcSourceContext context, SqlSelect select, String viewName) {
     final DataBuffer dataBuffer = dataBufferFactory.create(context);
-    final List<Partition> partitions = getPartitions(select);
+    final PartitionInfo partitionInfo = getJoinInfo(select);
     final ProgressiveViewStatement statement =
-        new ProgressiveViewStatement(driver, connection, context, dataBuffer, partitions);
+        new ProgressiveViewStatement(driver, connection, context, dataBuffer, partitionInfo);
 
     viewStatements.put(viewName, statement);
 
@@ -129,14 +167,23 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
   }
 
   private void assertValid(SqlSelect select) {
-    SqlNode fromNode = select.getFrom();
-    if (!(fromNode instanceof SqlIdentifier)) {
-      throw new IllegalArgumentException("from is not of type SqlIdentifier");
+    assertValidFrom(select.getFrom());
+  }
+
+  private void assertValidFrom(SqlNode from) {
+    if (from instanceof SqlSelect) {
+      throw new IllegalArgumentException("subqueries are not supported");
     }
 
-    SqlIdentifier fromId = (SqlIdentifier) fromNode;
-    if (fromId.names.size() != 1) {
-      throw new IllegalArgumentException("from does not contain exact 1 source");
+    if (from instanceof SqlJoin) {
+      final SqlJoin join = (SqlJoin) from;
+      switch (join.getJoinType()) {
+        case COMMA:
+          assertValidFrom(join.getLeft());
+          break;
+        default:
+          throw new IllegalArgumentException("join type not supported: " + join.getJoinType());
+      }
     }
   }
 }

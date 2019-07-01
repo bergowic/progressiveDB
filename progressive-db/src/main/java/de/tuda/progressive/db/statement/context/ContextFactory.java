@@ -6,7 +6,7 @@ import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.calcite.sql.SqlIdentifier;
 
 import java.sql.Connection;
 import java.util.function.Function;
@@ -17,15 +17,13 @@ public interface ContextFactory<
   C1 create(
       Connection connection,
       SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper);
+      Function<SqlIdentifier, Column> columnMapper);
 
   C2 create(
-      D dataBuffer,
-      SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper);
+      D dataBuffer, SqlSelectProgressive select, Function<SqlIdentifier, Column> columnMapper);
 
   C1 create(
       Connection connection,
       SqlCreateProgressiveView view,
-      Function<Pair<String, String>, Column> columnMapper);
+      Function<SqlIdentifier, Column> columnMapper);
 }

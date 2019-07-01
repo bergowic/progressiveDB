@@ -2,52 +2,63 @@ package de.tuda.progressive.db.model;
 
 public class Partition {
 
-	private String srcTable;
+  private String srcTable;
 
-	private String tableName;
+  private String tableName;
 
-	private int id;
+  private int id;
 
-	private long entries;
+  private long entries;
 
-	public Partition() {}
+  private boolean fact;
 
-	public Partition(String srcTable, String tableName, int id, long entries) {
-		this.srcTable = srcTable;
-		this.tableName = tableName;
-		this.id = id;
-		this.entries = entries;
-	}
+  public Partition() {}
 
-	public String getSrcTable() {
-		return srcTable;
-	}
+  public Partition(String srcTable, String tableName, int id, long entries, boolean fact) {
+    this.srcTable = srcTable;
+    this.tableName = tableName;
+    this.id = id;
+    this.entries = entries;
+    this.fact = fact;
+  }
 
-	public void setSrcTable(String srcTable) {
-		this.srcTable = srcTable;
-	}
+  public String getSrcTable() {
+    return srcTable;
+  }
 
-	public String getTableName() {
-		return tableName;
-	}
+  public void setSrcTable(String srcTable) {
+    this.srcTable = srcTable;
+  }
 
-	public void setTableName(String tableName) {
-		this.tableName = tableName;
-	}
+  public String getTableName() {
+    return tableName;
+  }
 
-	public int getId() {
-		return id;
-	}
+  public void setTableName(String tableName) {
+    this.tableName = tableName;
+  }
 
-	public void setId(int id) {
-		this.id = id;
-	}
+  public int getId() {
+    return id;
+  }
 
-	public long getEntries() {
-		return entries;
-	}
+  public void setId(int id) {
+    this.id = id;
+  }
 
-	public void setEntries(long entries) {
-		this.entries = entries;
-	}
+  public long getEntries() {
+    return entries;
+  }
+
+  public void setEntries(long entries) {
+    this.entries = entries;
+  }
+
+  public boolean isFact() {
+    return fact;
+  }
+
+  public void setFact(boolean fact) {
+    this.fact = fact;
+  }
 }

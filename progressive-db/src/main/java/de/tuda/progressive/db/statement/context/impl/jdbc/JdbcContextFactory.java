@@ -51,7 +51,7 @@ public class JdbcContextFactory
   protected JdbcSelectContext create(
       Connection connection,
       SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper,
+      Function<SqlIdentifier, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource) {
     final List<SqlIdentifier> fieldNames = getFieldNames(select.getSelectList());
@@ -73,6 +73,7 @@ public class JdbcContextFactory
           .metaFields(metaFields)
           .bounds(bounds)
           .selectSource(selectSource)
+          .sourceTables(getTables(select.getFrom()))
           .fieldNames(fieldNames)
           .createBuffer(createBuffer)
           .selectBuffer(selectBuffer)
@@ -88,7 +89,7 @@ public class JdbcContextFactory
   public JdbcSourceContext create(
       JdbcDataBuffer dataBuffer,
       SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper) {
+      Function<SqlIdentifier, Column> columnMapper) {
     final JdbcSelectContext context = dataBuffer.getContext();
     final Pair<SqlSelect, List<Integer>> transformed = transformSelect(context, select);
 
@@ -110,7 +111,7 @@ public class JdbcContextFactory
   protected JdbcSelectContext create(
       Connection connection,
       SqlCreateProgressiveView view,
-      Function<Pair<String, String>, Column> columnMapper,
+      Function<SqlIdentifier, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource) {
     final SqlSelect select = (SqlSelect) view.getQuery();
@@ -133,6 +134,7 @@ public class JdbcContextFactory
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
           .selectSource(selectSource)
+          .sourceTables(getTables(select.getFrom()))
           .bounds(bounds)
           .selectBuffer(selectBuffer)
           .metaFields(metaFields)
@@ -177,11 +179,9 @@ public class JdbcContextFactory
   }
 
   private Map<Integer, Pair<Integer, Integer>> getBounds(
-      Function<Pair<String, String>, Column> columnMapper,
-      List<MetaField> metaFields,
-      SqlSelect select) {
+      Function<SqlIdentifier, Column> columnMapper, List<MetaField> metaFields, SqlSelect select) {
     final SqlNodeList selectList = select.getSelectList();
-    final String table = ((SqlIdentifier) select.getFrom()).getSimple();
+    final List<SqlIdentifier> tables = getTables(select.getFrom());
     final Map<Integer, Pair<Integer, Integer>> bounds = new HashMap<>();
 
     for (int i = 0; i < metaFields.size(); i++) {
@@ -191,11 +191,21 @@ public class JdbcContextFactory
           node = node.operand(0);
         }
 
-        final String columnName = ((SqlIdentifier) node.operand(0)).getSimple();
-        final Column column = columnMapper.apply(ImmutablePair.of(table, columnName));
+        final SqlIdentifier columnIdentifier = node.operand(0);
+        Column column;
+        if (columnIdentifier.names.size() == 1) {
+          column = tables.stream().map(columnMapper).filter(Objects::nonNull).findAny().get();
+        } else {
+          column = columnMapper.apply(columnIdentifier);
+        }
+
+        if (column == null) {
+          throw new IllegalArgumentException("column not found: " + columnIdentifier);
+        }
         bounds.put(i, ImmutablePair.of((int) column.getMin(), (int) column.getMax()));
       }
     }
+
     return bounds;
   }
 

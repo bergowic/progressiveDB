@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import org.slf4j.Logger;
@@ -24,12 +25,12 @@ public class ProgressiveSelectStatement extends ProgressiveBaseStatement {
       Connection connection,
       JdbcSourceContext context,
       DataBuffer dataBuffer,
-      List<Partition> partitions) {
-    super(driver, connection, context, dataBuffer, partitions);
+      PartitionInfo partitionInfo) {
+    super(driver, connection, context, dataBuffer, partitionInfo);
   }
 
   @Override
-  protected synchronized void queryHandled(Partition partition) {
+  protected synchronized void queryHandled() {
     log.info("run cache query");
 
     List<Object[]> rows = dataBuffer.get(getReadPartitions(), getProgress());

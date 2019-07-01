@@ -16,7 +16,6 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.util.Litmus;
-import org.apache.commons.lang3.tuple.Pair;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -264,7 +263,7 @@ class BaseContextFactoryTest {
     protected JdbcSourceContext create(
         Connection connection,
         SqlSelectProgressive select,
-        Function<Pair<String, String>, Column> columnMapper,
+        Function<SqlIdentifier, Column> columnMapper,
         List<MetaField> metaFields,
         SqlSelect selectSource) {
       return null;
@@ -274,17 +273,18 @@ class BaseContextFactoryTest {
     protected JdbcSourceContext create(
         Connection connection,
         SqlCreateProgressiveView view,
-        Function<Pair<String, String>, Column> columnMapper,
+        Function<SqlIdentifier, Column> columnMapper,
         List<MetaField> metaFields,
         SqlSelect selectSource) {
-      return new JdbcSourceContext(metaFields, null, selectSource);
+      final SqlSelect select = (SqlSelect) view.getQuery();
+      return new JdbcSourceContext(metaFields, null, selectSource, getTables(select.getFrom()));
     }
 
     @Override
     public JdbcSourceContext create(
         JdbcDataBuffer dataBuffer,
         SqlSelectProgressive select,
-        Function<Pair<String, String>, Column> columnMapper) {
+        Function<SqlIdentifier, Column> columnMapper) {
       return null;
     }
 

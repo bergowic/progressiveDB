@@ -14,10 +14,10 @@ import org.apache.calcite.sql.*;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.sql.Connection;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.function.Function;
@@ -38,7 +38,7 @@ public abstract class BaseContextFactory<
   public C1 create(
       Connection connection,
       SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper) {
+      Function<SqlIdentifier, Column> columnMapper) {
     final List<MetaField> metaFields = getMetaFields(select.getSelectList());
     final SqlSelect selectSource = transformSelect(select, metaFields);
 
@@ -49,7 +49,7 @@ public abstract class BaseContextFactory<
   public C1 create(
       Connection connection,
       SqlCreateProgressiveView view,
-      Function<Pair<String, String>, Column> columnMapper) {
+      Function<SqlIdentifier, Column> columnMapper) {
     final SqlSelect select = (SqlSelect) view.getQuery();
 
     final List<MetaField> metaFields = getMetaFields(select.getSelectList());
@@ -61,14 +61,14 @@ public abstract class BaseContextFactory<
   protected abstract C1 create(
       Connection connection,
       SqlSelectProgressive select,
-      Function<Pair<String, String>, Column> columnMapper,
+      Function<SqlIdentifier, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource);
 
   protected abstract C1 create(
       Connection connection,
       SqlCreateProgressiveView view,
-      Function<Pair<String, String>, Column> columnMapper,
+      Function<SqlIdentifier, Column> columnMapper,
       List<MetaField> metaFields,
       SqlSelect selectSource);
 
@@ -171,16 +171,10 @@ public abstract class BaseContextFactory<
       }
     }
 
-    final SqlIdentifier oldFrom = (SqlIdentifier) select.getFrom();
-    SqlIdentifier from;
-    if (sourceDriver.hasPartitions()) {
-      from = SqlUtils.getIdentifier(sourceDriver.getPartitionTable(oldFrom.getSimple()));
-    } else {
-      from = oldFrom;
-    }
+    final SqlNode from = transformFrom(select.getFrom());
 
     final List<SqlNode> futures = new ArrayList<>();
-    final SqlBasicCall where = createWhere(futures, select.getWhere());
+    final SqlBasicCall where = createWhere(futures, from, select.getWhere());
     final int metaFieldsSize = metaFields.size();
 
     boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
@@ -210,6 +204,31 @@ public abstract class BaseContextFactory<
         select.getFetch());
   }
 
+  private SqlNode transformFrom(SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      final SqlIdentifier identifier = (SqlIdentifier) node;
+      if (sourceDriver.hasPartitions()) {
+        return SqlUtils.getIdentifier(sourceDriver.getPartitionTable(identifier.getSimple()));
+      } else {
+        // TODO
+        throw new UnsupportedOperationException("only driver with partitioning are supported");
+      }
+    } else if (node instanceof SqlJoin) {
+      final SqlJoin join = (SqlJoin) node;
+      // TODO currently just comma supported
+      return new SqlJoin(
+          SqlParserPos.ZERO,
+          transformFrom(join.getLeft()),
+          SqlLiteral.createBoolean(false, SqlParserPos.ZERO),
+          JoinType.COMMA.symbol(SqlParserPos.ZERO),
+          transformFrom(join.getRight()),
+          JoinConditionType.NONE.symbol(SqlParserPos.ZERO),
+          null);
+    } else {
+      throw new IllegalArgumentException("from not supported: " + node);
+    }
+  }
+
   protected final SqlNode removeFuture(SqlNode node) {
     if (node instanceof SqlFutureNode) {
       return ((SqlFutureNode) node).getNode();
@@ -230,13 +249,13 @@ public abstract class BaseContextFactory<
     return node;
   }
 
-  private SqlBasicCall createWhere(List<SqlNode> futures, SqlNode oldWhere) {
+  private SqlBasicCall createWhere(List<SqlNode> futures, SqlNode from, SqlNode oldWhere) {
     final SqlBasicCall where = transformWhere(futures, oldWhere);
     if (!sourceDriver.hasPartitions()) {
       return where;
     }
 
-    final SqlBasicCall eqPartition = createWhereEqPartition();
+    final SqlBasicCall eqPartition = createWhereEqPartition(from);
     if (where == null) {
       return eqPartition;
     }
@@ -245,14 +264,30 @@ public abstract class BaseContextFactory<
         SqlStdOperatorTable.AND, new SqlNode[] {where, eqPartition}, SqlParserPos.ZERO);
   }
 
-  private SqlBasicCall createWhereEqPartition() {
-    return new SqlBasicCall(
-        SqlStdOperatorTable.EQUALS,
-        new SqlNode[] {
-          new SqlIdentifier(Collections.singletonList("_partition"), SqlParserPos.ZERO),
-          new SqlDynamicParam(0, SqlParserPos.ZERO)
-        },
-        SqlParserPos.ZERO);
+  private SqlBasicCall createWhereEqPartition(SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      final SqlIdentifier identifier = (SqlIdentifier) node;
+
+      return new SqlBasicCall(
+          SqlStdOperatorTable.EQUALS,
+          new SqlNode[] {
+            new SqlIdentifier(
+                Arrays.asList(identifier.getSimple(), "_partition"), SqlParserPos.ZERO),
+            new SqlDynamicParam(0, SqlParserPos.ZERO)
+          },
+          SqlParserPos.ZERO);
+    } else if (node instanceof SqlJoin) {
+      final SqlJoin join = (SqlJoin) node;
+
+      return new SqlBasicCall(
+          SqlStdOperatorTable.AND,
+          new SqlNode[] {
+            createWhereEqPartition(join.getLeft()), createWhereEqPartition(join.getRight())
+          },
+          SqlParserPos.ZERO);
+    } else {
+      throw new IllegalArgumentException("node not supported: " + node);
+    }
   }
 
   private SqlBasicCall transformWhere(List<SqlNode> futures, SqlNode oldWhere) {
@@ -374,5 +409,19 @@ public abstract class BaseContextFactory<
     NONE,
     MIXED,
     FULL
+  }
+
+  protected final List<SqlIdentifier> getTables(SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      return Collections.singletonList((SqlIdentifier) node);
+    } else if (node instanceof SqlJoin) {
+      final SqlJoin join = (SqlJoin) node;
+      final List<SqlIdentifier> tables = new ArrayList<>();
+      tables.addAll(getTables(join.getLeft()));
+      tables.addAll(getTables(join.getRight()));
+      return tables;
+    } else {
+      throw new IllegalArgumentException("node not supported: " + node);
+    }
   }
 }

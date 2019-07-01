@@ -26,7 +26,7 @@ public class ProgressiveViewSelectStatement
   }
 
   @Override
-  public synchronized void handle(Partition partition) {
+  public synchronized void handle() {
     List<Object[]> rows = dataBuffer.get(view.getReadPartitions(), view.getProgress());
     results.addAll(rows);
 
