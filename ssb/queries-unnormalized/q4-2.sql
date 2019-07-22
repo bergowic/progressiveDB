@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   d_order_year,
   s_nation,
   p_category,
@@ -20,4 +21,4 @@ GROUP BY
 ORDER BY 
   d_order_year,
   s_nation,
-  p_category;
+  p_category

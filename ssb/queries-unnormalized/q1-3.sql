@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   SUM(lo_extendedprice * lo_discount) AS revenue
 FROM 
   %s
@@ -8,4 +9,3 @@ WHERE
   AND lo_discount BETWEEN 5 AND 7
   AND lo_quantity BETWEEN 26 AND 35
   %s
-;

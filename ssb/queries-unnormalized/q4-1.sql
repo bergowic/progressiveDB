@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   d_order_year,
   c_nation,
   SUM(lo_revenue - lo_supplycost) AS profit
@@ -15,4 +16,4 @@ GROUP BY
   c_nation
 ORDER BY 
   d_order_year,
-  c_nation;
+  c_nation

@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   c_city,
   s_city,
   d_order_year,
@@ -18,4 +19,4 @@ GROUP BY
   d_order_year
 ORDER BY 
   d_order_year ASC, 
-  revenue DESC;
+  revenue DESC

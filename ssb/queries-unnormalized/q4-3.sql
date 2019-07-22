@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   d_order_year,
   s_city,
   p_brand1,
@@ -19,4 +20,4 @@ GROUP BY
 ORDER BY 
   d_order_year,
   s_city,
-  p_brand1;
+  p_brand1

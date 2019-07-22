@@ -1,4 +1,5 @@
-SELECT 
+SELECT %s
+  %s
   SUM(lo_revenue),
   d_order_year,
   p_brand1
@@ -13,4 +14,4 @@ GROUP BY
   p_brand1
 ORDER BY 
   d_order_year,
-  p_brand1;
+  p_brand1
