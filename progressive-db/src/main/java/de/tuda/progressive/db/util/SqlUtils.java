@@ -257,6 +257,10 @@ public class SqlUtils {
     return new SqlIdentifier(name, SqlParserPos.ZERO);
   }
 
+  public static SqlIdentifier getIdentifier(String table, String column) {
+    return new SqlIdentifier(Arrays.asList(table, column), SqlParserPos.ZERO);
+  }
+
   public static SqlIdentifier getColumnIdentifier(ResultSetMetaData metaData, int pos) {
     try {
       return new SqlIdentifier(metaData.getColumnName(pos), SqlParserPos.ZERO);
