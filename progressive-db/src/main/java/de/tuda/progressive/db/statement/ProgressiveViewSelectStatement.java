@@ -60,7 +60,7 @@ public class ProgressiveViewSelectStatement
 
   @Override
   public boolean isDone() {
-    return false;
+    return !view.hasPartitionsToRead();
   }
 
   @Override

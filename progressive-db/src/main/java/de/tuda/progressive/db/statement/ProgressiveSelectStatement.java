@@ -3,7 +3,6 @@ package de.tuda.progressive.db.statement;
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.model.PartitionInfo;
-import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

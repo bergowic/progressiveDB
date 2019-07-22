@@ -91,7 +91,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
     executor.submit(
         () -> {
           try {
-            while (!isDone()) {
+            while (hasPartitionsToRead()) {
               synchronized (this) {
                 if (isClosed) {
                   break;
@@ -166,9 +166,13 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
     return dataBuffer;
   }
 
+  protected final boolean hasPartitionsToRead() {
+    return readPartitions < partitionInfo.getPartitionCount();
+  }
+
   @Override
   public synchronized boolean isDone() {
-    return readPartitions == partitionInfo.getPartitionCount();
+    return !hasPartitionsToRead();
   }
 
   @Override
