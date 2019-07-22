@@ -24,6 +24,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -88,6 +89,9 @@ public class SqlUtils {
     SqlTypeName sqlType;
 
     switch (type) {
+      case Types.DECIMAL:
+        sqlType = SqlTypeName.DECIMAL;
+        break;
       case Types.INTEGER:
         sqlType = SqlTypeName.INTEGER;
         break;
