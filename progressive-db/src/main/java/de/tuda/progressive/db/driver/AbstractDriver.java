@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.sql.*;
 import java.util.*;
+import java.util.stream.Collectors;
 
 public abstract class AbstractDriver implements DbDriver {
 
@@ -58,7 +59,8 @@ public abstract class AbstractDriver implements DbDriver {
       insertData(connection, currentTable, partitionCount);
 
       log.info("read meta data of table {}", currentTable);
-      partitions.addAll(getPartitions(connection, currentTable, partitionCount));
+      partitions.addAll(
+          getPartitions(connection, currentTable, partitionCount, table.equals(currentTable)));
     }
 
     return partitions;
@@ -68,23 +70,20 @@ public abstract class AbstractDriver implements DbDriver {
     final Set<String> foreignTables = getForeignTables(connection, baseTable);
     final SortedMap<String, Integer> partitionSizes = new TreeMap<>();
 
-    if (partitionSize > 0) {
-      partitionSizes.put(baseTable, getPartitionCount(connection, baseTable, partitionSize));
+    int size =
+        partitionSize > 0 ? partitionSize : getPartitionSize(connection, baseTable, foreignTables);
 
-      for (String foreignTable : foreignTables) {
-        partitionSizes.put(
-            foreignTable, getPartitionCount(connection, foreignTable, partitionSize));
-      }
-    } else {
-      log.info("get count of partitions of table {}", baseTable, partitionSize);
-      throw new UnsupportedOperationException();
+    partitionSizes.put(baseTable, getPartitionCount(connection, baseTable, size));
+    for (String foreignTable : foreignTables) {
+      partitionSizes.put(foreignTable, getPartitionCount(connection, foreignTable, size));
     }
 
     return partitionSizes;
   }
 
-  private Set<String> getForeignTables(Connection connection, String baseTable) {
+  protected Set<String> getForeignTables(Connection connection, String baseTable) {
     final Set<String> foreignTables = new HashSet<>();
+
     try (ResultSet result = connection.getMetaData().getImportedKeys(null, null, baseTable)) {
       while (result.next()) {
         foreignTables.add(result.getString("PKTABLE_NAME"));
@@ -94,6 +93,28 @@ public abstract class AbstractDriver implements DbDriver {
       throw new RuntimeException(e);
     }
     return foreignTables;
+  }
+
+  protected List<SqlBasicCall> getJoins(Connection connection, String baseTable) {
+    final List<SqlBasicCall> joins = new ArrayList<>();
+
+    try (ResultSet result = connection.getMetaData().getImportedKeys(null, null, baseTable)) {
+      while (result.next()) {
+        final SqlIdentifier fk =
+            SqlUtils.getIdentifier(
+                result.getString("FKTABLE_NAME"), result.getString("FKCOLUMN_NAME"));
+        final SqlIdentifier pk =
+            SqlUtils.getIdentifier(
+                result.getString("PKTABLE_NAME"), result.getString("PKCOLUMN_NAME"));
+        joins.add(
+            new SqlBasicCall(
+                SqlStdOperatorTable.EQUALS, new SqlNode[] {fk, pk}, SqlParserPos.ZERO));
+      }
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+    return joins;
   }
 
   protected void createPartitions(Connection connection, String table, int partitions) {
@@ -239,7 +260,8 @@ public abstract class AbstractDriver implements DbDriver {
     }
   }
 
-  private List<Partition> getPartitions(Connection connection, String table, int partitionCount) {
+  private List<Partition> getPartitions(
+      Connection connection, String table, int partitionCount, boolean isFact) {
     final List<Partition> partitions = new ArrayList<>();
     for (int i = 0; i < partitionCount; i++) {
       final String partitionName = getPartitionTable(table, i);
@@ -248,6 +270,7 @@ public abstract class AbstractDriver implements DbDriver {
       partition.setTableName(partitionName);
       partition.setId(i);
       partition.setEntries(getPartitionEntries(connection, table, i));
+      partition.setFact(isFact);
       partitions.add(partition);
     }
     return partitions;
@@ -308,6 +331,205 @@ public abstract class AbstractDriver implements DbDriver {
         new SqlNodeList(SqlParserPos.ZERO),
         null,
         null);
+  }
+
+  private int getPartitionSize(Connection connection, String baseTable, Set<String> foreignTables) {
+    final String aggregationColumn = getAggregationColumn(connection, baseTable);
+    final List<SqlIdentifier> groups = new ArrayList<>();
+    final int groupLimit = Math.max(5, foreignTables.size());
+    SqlNode from = null;
+    SqlNode where = null;
+
+    if (foreignTables.size() > 0) {
+      for (String table : foreignTables) {
+        groups.addAll(getGroupColumnsIdentifiers(connection, table, 1, false));
+      }
+
+      int i = 0;
+      final List<String> tables = new ArrayList<>(foreignTables);
+      while (groups.size() < groupLimit) {
+        groups.addAll(getGroupColumnsIdentifiers(connection, tables.get(i), 1, false));
+        i %= tables.size();
+      }
+
+      for (SqlBasicCall join : getJoins(connection, baseTable)) {
+        where =
+            where == null
+                ? join
+                : new SqlBasicCall(
+                    SqlStdOperatorTable.AND, new SqlNode[] {where, join}, SqlParserPos.ZERO);
+      }
+    } else {
+      groups.addAll(getGroupColumnsIdentifiers(connection, baseTable, groupLimit, true));
+    }
+
+    final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
+    selectList.add(
+        SqlStdOperatorTable.AVG.createCall(
+            SqlParserPos.ZERO, SqlUtils.getIdentifier(aggregationColumn)));
+
+    int size = 1000000;
+    int targetTime = 400;
+
+    for (; ; ) {
+      final SqlNode limit =
+          SqlNumericLiteral.createExactNumeric(String.valueOf(size), SqlParserPos.ZERO);
+
+      SqlNode source = getSelectAll(baseTable);
+      ((SqlSelect) source).setFetch(limit);
+
+      source = SqlUtils.getAlias(source, baseTable);
+
+      for (String table : foreignTables) {
+        SqlSelect joinSource = getSelectAll(table);
+        joinSource.setFetch(limit);
+
+        source =
+            (new SqlJoin(
+                SqlParserPos.ZERO,
+                source,
+                SqlLiteral.createBoolean(false, SqlParserPos.ZERO),
+                JoinType.COMMA.symbol(SqlParserPos.ZERO),
+                SqlUtils.getAlias(joinSource, table),
+                JoinConditionType.NONE.symbol(SqlParserPos.ZERO),
+                null));
+      }
+
+      final SqlSelect select =
+          new SqlSelect(
+              SqlParserPos.ZERO,
+              new SqlNodeList(SqlParserPos.ZERO),
+              selectList,
+              source,
+              where,
+              new SqlNodeList(groups, SqlParserPos.ZERO),
+              null,
+              null,
+              new SqlNodeList(SqlParserPos.ZERO),
+              null,
+              null);
+
+      final String sql = toSql(select);
+
+      int RUNS = 5;
+      int time = 0;
+      for (int i = 0; i < RUNS; i++) {
+        final long start = System.nanoTime();
+        try (Statement statement = connection.createStatement()) {
+          try (ResultSet result = statement.executeQuery(sql)) {
+            result.next();
+            final long end = System.nanoTime();
+            time += (end - start) / 1000000;
+          }
+        } catch (SQLException e) {
+          // TODO
+          throw new RuntimeException(e);
+        }
+      }
+
+      time /= RUNS;
+
+      int newSize = (int) (size * ((double) targetTime / (double) time));
+      int deviation = newSize / 10;
+      int tail = (int) Math.floor(Math.log10(newSize) - 1);
+      int leading = (int) (newSize / Math.pow(10, tail));
+      newSize = leading * (int) Math.pow(10, tail);
+
+      if (size >= newSize - deviation && size <= newSize + deviation) {
+        break;
+      }
+
+      size = newSize;
+    }
+
+    return size;
+  }
+
+  private String getAggregationColumn(Connection connection, String table) {
+    try (PreparedStatement statement = connection.prepareStatement(toSql(getSelectAll(table)))) {
+      final ResultSetMetaData metaData = statement.getMetaData();
+
+      for (int i = 1; i <= metaData.getColumnCount(); i++) {
+        switch (metaData.getColumnType(i)) {
+          case Types.TINYINT:
+          case Types.SMALLINT:
+          case Types.INTEGER:
+          case Types.BIGINT:
+          case Types.FLOAT:
+          case Types.DOUBLE:
+          case Types.REAL:
+            return metaData.getColumnName(i);
+        }
+      }
+
+      throw new IllegalStateException("no aggregation field found for: " + table);
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
+  }
+
+  private List<SqlIdentifier> getGroupColumnsIdentifiers(
+      Connection connection, String table, int limit, boolean numbers) {
+    return getGroupColumns(connection, table, limit, numbers).stream()
+        .map(SqlUtils::getIdentifier)
+        .collect(Collectors.toList());
+  }
+
+  private List<String> getGroupColumns(
+      Connection connection, String table, int limit, boolean numbers) {
+    try (PreparedStatement statement = connection.prepareStatement(toSql(getSelectAll(table)))) {
+      final List<String> columns = new ArrayList<>();
+      final ResultSetMetaData metaData = statement.getMetaData();
+      if (metaData.getColumnCount() < limit) {
+        limit = metaData.getColumnCount();
+      }
+
+      for (int i = 1; i <= metaData.getColumnCount(); i++) {
+        switch (metaData.getColumnType(i)) {
+          case Types.VARCHAR:
+          case Types.CHAR:
+          case Types.DATE:
+          case Types.NCHAR:
+          case Types.TIME:
+          case Types.TIMESTAMP:
+          case Types.LONGNVARCHAR:
+          case Types.LONGVARCHAR:
+          case Types.NVARCHAR:
+          case Types.TIME_WITH_TIMEZONE:
+          case Types.TIMESTAMP_WITH_TIMEZONE:
+            columns.add(metaData.getColumnName(i));
+
+            if (columns.size() == limit) {
+              return columns;
+            }
+        }
+      }
+
+      if (numbers) {
+        for (int i = 1; i <= metaData.getColumnCount(); i++) {
+          switch (metaData.getColumnType(i)) {
+            case Types.TINYINT:
+            case Types.SMALLINT:
+            case Types.INTEGER:
+            case Types.BIGINT:
+            case Types.FLOAT:
+            case Types.DOUBLE:
+            case Types.REAL:
+              columns.add(metaData.getColumnName(i));
+
+              if (columns.size() == limit) {
+                return columns;
+              }
+          }
+        }
+      }
+
+      return columns;
+    } catch (SQLException e) {
+      // TODO
+      throw new RuntimeException(e);
+    }
   }
 
   public abstract static class Builder<D extends AbstractDriver, B extends Builder<D, B>> {
