@@ -13,10 +13,7 @@ import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlJoin;
-import org.apache.calcite.sql.SqlNode;
-import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.*;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -89,9 +86,25 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
       Connection connection, SqlCreateProgressiveView createProgressiveView) {
     log.info("prepare progressive view: {}", createProgressiveView);
 
-    final SqlNode query = createProgressiveView.getQuery();
+    SqlNode query = createProgressiveView.getQuery();
+
+    if (query instanceof SqlOrderBy) {
+      final SqlOrderBy orderBy = (SqlOrderBy) query;
+      final SqlSelect select = (SqlSelect) orderBy.query;
+      select.setOrderBy(orderBy.orderList);
+
+      query = select;
+      createProgressiveView =
+          new SqlCreateProgressiveView(
+              createProgressiveView.getParserPosition(),
+              createProgressiveView.getReplace(),
+              createProgressiveView.getName(),
+              createProgressiveView.getColumnList(),
+              query);
+    }
+
     if (!(query instanceof SqlSelect)) {
-      throw new IllegalArgumentException("query must be a select");
+      throw new IllegalArgumentException("query must be a select: " + query.getClass());
     }
 
     final SqlSelect select = (SqlSelect) query;

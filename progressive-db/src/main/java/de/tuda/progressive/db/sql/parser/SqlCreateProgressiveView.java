@@ -22,7 +22,7 @@ public class SqlCreateProgressiveView extends SqlCreate {
 	private final SqlNodeList columnList;
 	private final SqlNode query;
 
-	SqlCreateProgressiveView(SqlParserPos pos, boolean replace, SqlIdentifier name, SqlNodeList columnList, SqlNode query) {
+	public SqlCreateProgressiveView(SqlParserPos pos, boolean replace, SqlIdentifier name, SqlNodeList columnList, SqlNode query) {
 		super(OPERATOR, pos, replace, false);
 
 		this.name = Objects.requireNonNull(name);
