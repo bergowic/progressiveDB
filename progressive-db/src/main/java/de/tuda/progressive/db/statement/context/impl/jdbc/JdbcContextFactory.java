@@ -67,7 +67,7 @@ public class JdbcContextFactory
       final SqlCreateTable createBuffer =
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
       final SqlSelect selectBuffer =
-          getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields);
+          getSelectBuffer(select, bufferFieldNames, bufferTableName, fieldNames, metaFields);
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .metaFields(metaFields)
@@ -129,7 +129,7 @@ public class JdbcContextFactory
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
       final SqlSelect selectBuffer =
           getSelectBuffer(
-              bufferFieldNames, bufferTableName, fieldNames, metaFields, select.getWhere());
+              select, bufferFieldNames, bufferTableName, fieldNames, metaFields, select.getWhere());
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
@@ -496,14 +496,17 @@ public class JdbcContextFactory
   }
 
   private SqlSelect getSelectBuffer(
+      SqlSelect originalSelect,
       List<String> bufferFieldNames,
       String bufferTableName,
       List<SqlIdentifier> fieldNames,
       List<MetaField> metaFields) {
-    return getSelectBuffer(bufferFieldNames, bufferTableName, fieldNames, metaFields, null);
+    return getSelectBuffer(
+        originalSelect, bufferFieldNames, bufferTableName, fieldNames, metaFields, null);
   }
 
   private SqlSelect getSelectBuffer(
+      SqlSelect originalSelect,
       List<String> bufferFieldNames,
       String bufferTableName,
       List<SqlIdentifier> fieldNames,
@@ -570,9 +573,9 @@ public class JdbcContextFactory
         new SqlIdentifier(bufferTableName, SqlParserPos.ZERO),
         transformWhere(where),
         groupBy.size() == 0 ? null : groupBy,
+        null, // TODO
         null,
-        null,
-        null,
+        originalSelect.getOrderList(),
         null,
         null);
   }
