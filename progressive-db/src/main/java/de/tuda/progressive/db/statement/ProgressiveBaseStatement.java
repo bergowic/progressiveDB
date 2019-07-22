@@ -132,7 +132,9 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
         preparedStatement.setInt(i++, partitionId);
       }
 
-      log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
+      if (log.isInfoEnabled()) {
+        log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
+      }
 
       return preparedStatement.executeQuery();
     } else {
