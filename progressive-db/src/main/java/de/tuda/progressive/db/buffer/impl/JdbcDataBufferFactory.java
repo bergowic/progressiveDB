@@ -5,6 +5,7 @@ import de.tuda.progressive.db.buffer.DataBufferFactory;
 import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.driver.DbDriverFactory;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
@@ -83,8 +84,7 @@ public class JdbcDataBufferFactory
         return dataSource.getConnection();
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
 
     // should never happen
@@ -98,8 +98,7 @@ public class JdbcDataBufferFactory
       try {
         connectionUrl = connection.getMetaData().getURL();
       } catch (SQLException e) {
-        // TODO
-        throw new RuntimeException(e);
+        throw new ProgressiveException(e);
       }
     }
 

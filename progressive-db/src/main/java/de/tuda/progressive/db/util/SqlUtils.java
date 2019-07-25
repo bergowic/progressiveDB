@@ -1,6 +1,7 @@
 package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.statement.context.MetaField;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.type.RelDataType;
@@ -54,8 +55,7 @@ public class SqlUtils {
         columns.add(getColumnOfType(driver, name, columnType, precision, scale));
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
 
     for (SqlNode column : additionalColumns) {
@@ -78,8 +78,7 @@ public class SqlUtils {
         columns.add(getColumnIdentifier(metaData, i));
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
     return columns;
   }
@@ -150,8 +149,7 @@ public class SqlUtils {
       try {
         consumer.accept(value);
       } catch (SQLException e) {
-        // TODO
-        throw new RuntimeException(e);
+        throw new ProgressiveException(e);
       }
     };
   }
@@ -187,8 +185,7 @@ public class SqlUtils {
         }
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -265,8 +262,7 @@ public class SqlUtils {
     try {
       return new SqlIdentifier(metaData.getColumnName(pos), SqlParserPos.ZERO);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 

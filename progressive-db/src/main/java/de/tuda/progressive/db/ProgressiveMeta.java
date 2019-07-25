@@ -1,5 +1,6 @@
 package de.tuda.progressive.db;
 
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.sql.parser.*;
 import de.tuda.progressive.db.statement.ProgressiveStatement;
 import org.apache.calcite.avatica.MissingResultsException;
@@ -272,8 +273,7 @@ public class ProgressiveMeta extends JdbcMeta {
     try {
       return SqlParser.create(sql, parserConfig).parseStmt();
     } catch (SqlParseException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 }

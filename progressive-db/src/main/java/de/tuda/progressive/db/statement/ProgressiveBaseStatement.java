@@ -2,6 +2,7 @@ package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.SqlUtils;
@@ -65,8 +66,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
       metaData = dataBuffer.getMetaData();
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -120,8 +120,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
       queryHandled();
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 

@@ -1,5 +1,6 @@
 package de.tuda.progressive.db.driver;
 
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
@@ -89,8 +90,7 @@ public abstract class AbstractDriver implements DbDriver {
         foreignTables.add(result.getString("PKTABLE_NAME"));
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
     return foreignTables;
   }
@@ -111,8 +111,7 @@ public abstract class AbstractDriver implements DbDriver {
                 SqlStdOperatorTable.EQUALS, new SqlNode[] {fk, pk}, SqlParserPos.ZERO));
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
     return joins;
   }
@@ -132,8 +131,7 @@ public abstract class AbstractDriver implements DbDriver {
         }
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -162,8 +160,7 @@ public abstract class AbstractDriver implements DbDriver {
         }
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -209,8 +206,7 @@ public abstract class AbstractDriver implements DbDriver {
         return columns;
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -234,8 +230,7 @@ public abstract class AbstractDriver implements DbDriver {
       final String sql = toSql(SqlUtils.dropTable(table));
       statement.execute(sql);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -255,8 +250,7 @@ public abstract class AbstractDriver implements DbDriver {
 
       return columnNames;
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -295,8 +289,7 @@ public abstract class AbstractDriver implements DbDriver {
         return result.getLong(1);
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -422,8 +415,7 @@ public abstract class AbstractDriver implements DbDriver {
             time += (end - start) / 1000000;
           }
         } catch (SQLException e) {
-          // TODO
-          throw new RuntimeException(e);
+          throw new ProgressiveException(e);
         }
       }
 
@@ -464,8 +456,7 @@ public abstract class AbstractDriver implements DbDriver {
 
       throw new IllegalStateException("no aggregation field found for: " + table);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -527,8 +518,7 @@ public abstract class AbstractDriver implements DbDriver {
 
       return columns;
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 

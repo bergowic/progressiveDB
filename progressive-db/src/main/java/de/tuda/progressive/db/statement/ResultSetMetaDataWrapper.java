@@ -1,5 +1,6 @@
 package de.tuda.progressive.db.statement;
 
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.util.SqlFunction;
 
 import java.sql.ResultSetMetaData;
@@ -50,8 +51,7 @@ public class ResultSetMetaDataWrapper implements ResultSetMetaData {
 			}
 			return types;
 		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
+			throw new ProgressiveException(e);
 		}
 	}
 
@@ -63,8 +63,7 @@ public class ResultSetMetaDataWrapper implements ResultSetMetaData {
 			}
 			return names;
 		} catch (SQLException e) {
-			// TODO
-			throw new RuntimeException(e);
+			throw new ProgressiveException(e);
 		}
 	}
 

@@ -2,6 +2,7 @@ package de.tuda.progressive.db.buffer.impl;
 
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.statement.context.impl.jdbc.JdbcSelectContext;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -37,8 +38,7 @@ public class JdbcDataBuffer extends JdbcSelectDataBuffer<JdbcSelectContext>
     try (Statement statement = connection.createStatement()) {
       statement.execute(sql);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -47,8 +47,7 @@ public class JdbcDataBuffer extends JdbcSelectDataBuffer<JdbcSelectContext>
     try {
       addInternal(result);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 

@@ -2,6 +2,7 @@ package de.tuda.progressive.db.buffer.impl;
 
 import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.statement.ResultSetMetaDataWrapper;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
@@ -52,8 +53,7 @@ public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBu
     try {
       return connection.prepareStatement(sql);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -65,8 +65,7 @@ public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBu
     try {
       return new ResultSetMetaDataWrapper(statement.getMetaData());
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
@@ -104,8 +103,7 @@ public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBu
         results.add(row);
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
 
     return results;

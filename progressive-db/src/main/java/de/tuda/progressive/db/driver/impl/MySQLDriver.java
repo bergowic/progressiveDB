@@ -1,6 +1,7 @@
 package de.tuda.progressive.db.driver.impl;
 
 import de.tuda.progressive.db.driver.PartitionDriver;
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -52,8 +53,7 @@ public class MySQLDriver extends PartitionDriver {
         destStatement.execute(createTableSql);
       }
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 

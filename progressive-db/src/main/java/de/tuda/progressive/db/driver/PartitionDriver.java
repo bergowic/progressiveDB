@@ -1,5 +1,6 @@
 package de.tuda.progressive.db.driver;
 
+import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.util.SqlUtils;
 import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlDialect;
@@ -74,8 +75,7 @@ public abstract class PartitionDriver extends AbstractDriver {
 
       statement.execute(sql);
     } catch (SQLException e) {
-      // TODO
-      throw new RuntimeException(e);
+      throw new ProgressiveException(e);
     }
   }
 
