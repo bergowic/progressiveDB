@@ -83,8 +83,6 @@ public class ProgressiveMeta extends JdbcMeta {
 
   @Override
   public StatementHandle prepare(ConnectionHandle ch, String sql, long maxRowCount) {
-    System.out.println(sql);
-
     return prepareProgressiveStatement(
             sql,
             statement -> {
@@ -204,10 +202,9 @@ public class ProgressiveMeta extends JdbcMeta {
   private ExecuteResult execute(StatementHandle h, ProgressiveStatement statement) {
     statement.run();
 
-    ResultSet resultSet = statement.getResultSet();
-
     try {
-      Frame frame = createFrame(0, statement.isDone(), resultSet);
+      Frame frame = Frame.create(0, false, Collections.emptyList());
+
       MetaResultSet result =
           MetaResultSet.create(
               h.connectionId, h.id, false, signature(statement.getMetaData()), frame);
