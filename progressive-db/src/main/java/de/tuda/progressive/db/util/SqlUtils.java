@@ -2,6 +2,7 @@ package de.tuda.progressive.db.util;
 
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.exception.ProgressiveException;
+import de.tuda.progressive.db.model.ColumnMeta;
 import de.tuda.progressive.db.statement.context.MetaField;
 import org.apache.calcite.linq4j.function.Function2;
 import org.apache.calcite.rel.type.RelDataType;
@@ -35,7 +36,19 @@ public class SqlUtils {
   private static final RelDataTypeFactory typeFactory =
       new SqlTypeFactoryImpl(RelDataTypeSystem.DEFAULT);
 
-  private SqlUtils() {}
+  private SqlUtils() {
+  }
+
+  public static SqlCreateTable createTable(DbDriver driver, List<ColumnMeta> columnMetas,
+      String cacheTableName,
+      SqlNode... additionalColumns) {
+    final SqlNodeList columns = new SqlNodeList(SqlParserPos.ZERO);
+    for (ColumnMeta meta : columnMetas) {
+      columns.add(getColumnOfType(driver, meta.getName(), meta.getSqlType(), meta.getPrecision(),
+          meta.getScale()));
+    }
+    return createTable(columns, cacheTableName, additionalColumns);
+  }
 
   public static SqlCreateTable createTable(
       DbDriver driver,
@@ -58,6 +71,11 @@ public class SqlUtils {
       throw new ProgressiveException(e);
     }
 
+    return createTable(columns, cacheTableName, additionalColumns);
+  }
+
+  public static SqlCreateTable createTable(SqlNodeList columns, String cacheTableName,
+      SqlNode... additionalColumns) {
     for (SqlNode column : additionalColumns) {
       columns.add(column);
     }
@@ -217,7 +235,7 @@ public class SqlUtils {
   public static SqlBasicCall createCast(SqlNode node, SqlTypeName typeName) {
     return new SqlBasicCall(
         SqlStdOperatorTable.CAST,
-        new SqlNode[] {node, SqlUtils.getDataType(typeName)},
+        new SqlNode[]{node, SqlUtils.getDataType(typeName)},
         SqlParserPos.ZERO);
   }
 
@@ -247,7 +265,7 @@ public class SqlUtils {
 
   private static SqlBasicCall getDivide(SqlNode op1, SqlNode op2) {
     return new SqlBasicCall(
-        SqlStdOperatorTable.DIVIDE, new SqlNode[] {op1, op2}, SqlParserPos.ZERO);
+        SqlStdOperatorTable.DIVIDE, new SqlNode[]{op1, op2}, SqlParserPos.ZERO);
   }
 
   public static SqlIdentifier getIdentifier(String name) {
@@ -269,7 +287,7 @@ public class SqlUtils {
   public static SqlBasicCall getValues(SqlNode[] values) {
     return new SqlBasicCall(
         SqlStdOperatorTable.VALUES,
-        new SqlNode[] {new SqlBasicCall(new SqlRowOperator(" "), values, SqlParserPos.ZERO)},
+        new SqlNode[]{new SqlBasicCall(new SqlRowOperator(" "), values, SqlParserPos.ZERO)},
         SqlParserPos.ZERO);
   }
 
@@ -286,7 +304,7 @@ public class SqlUtils {
   }
 
   public static SqlNode getAlias(SqlNode node, SqlIdentifier alias) {
-    return new SqlBasicCall(SqlStdOperatorTable.AS, new SqlNode[] {node, alias}, SqlParserPos.ZERO);
+    return new SqlBasicCall(SqlStdOperatorTable.AS, new SqlNode[]{node, alias}, SqlParserPos.ZERO);
   }
 
   public static boolean contains(SqlNodeList list, SqlNode node) {

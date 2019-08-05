@@ -3,19 +3,43 @@ package de.tuda.progressive.db.driver;
 import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
+import de.tuda.progressive.db.model.ColumnMeta;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.Types;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
+import java.util.SortedMap;
+import java.util.TreeMap;
+import java.util.stream.Collectors;
+import org.apache.calcite.sql.JoinConditionType;
+import org.apache.calcite.sql.JoinType;
+import org.apache.calcite.sql.SqlAggFunction;
+import org.apache.calcite.sql.SqlBasicCall;
+import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlJoin;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlNumericLiteral;
+import org.apache.calcite.sql.SqlSelect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
 import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.*;
-import java.util.*;
-import java.util.stream.Collectors;
 
 public abstract class AbstractDriver implements DbDriver {
 
@@ -108,7 +132,7 @@ public abstract class AbstractDriver implements DbDriver {
                 result.getString("PKTABLE_NAME"), result.getString("PKCOLUMN_NAME"));
         joins.add(
             new SqlBasicCall(
-                SqlStdOperatorTable.EQUALS, new SqlNode[] {fk, pk}, SqlParserPos.ZERO));
+                SqlStdOperatorTable.EQUALS, new SqlNode[]{fk, pk}, SqlParserPos.ZERO));
       }
     } catch (SQLException e) {
       throw new ProgressiveException(e);
@@ -117,18 +141,16 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   protected void createPartitions(Connection connection, String table, int partitions) {
-    try (PreparedStatement srcStatement = connection.prepareStatement(toSql(getSelectAll(table)))) {
-      final ResultSetMetaData metaData = srcStatement.getMetaData();
+    final List<ColumnMeta> columnMetas = getColumnMetas(connection, table);
 
-      try (Statement destStatement = connection.createStatement()) {
-        for (int i = 0; i < partitions; i++) {
-          final String partitionTable = getPartitionTable(table, i);
-          final SqlCreateTable createTable =
-              SqlUtils.createTable(this, metaData, null, partitionTable);
+    try (Statement destStatement = connection.createStatement()) {
+      for (int i = 0; i < partitions; i++) {
+        final String partitionTable = getPartitionTable(table, i);
+        final SqlCreateTable createTable =
+            SqlUtils.createTable(this, columnMetas, partitionTable);
 
-          dropTable(connection, partitionTable);
-          destStatement.execute(toSql(createTable));
-        }
+        dropTable(connection, partitionTable);
+        destStatement.execute(toSql(createTable));
       }
     } catch (SQLException e) {
       throw new ProgressiveException(e);
@@ -146,18 +168,15 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private void insertData(Connection connection, String template, String table, int partitions) {
-    try (PreparedStatement columnStatement =
-        connection.prepareStatement(toSql(getSelectAll(table)))) {
-      final SqlNodeList columns = SqlUtils.getColumns(columnStatement.getMetaData());
+    final SqlNodeList columns = getSelectColumns(connection, table);
 
-      try (Statement statement = connection.createStatement()) {
-        for (int i = 0; i < partitions; i++) {
-          final String sql =
-              String.format(
-                  INSERT_PART_TPL, getPartitionTable(table, i), toSql(columns), template, i);
+    try (Statement statement = connection.createStatement()) {
+      for (int i = 0; i < partitions; i++) {
+        final String sql =
+            String.format(
+                INSERT_PART_TPL, getPartitionTable(table, i), toSql(columns), template, i);
 
-          statement.execute(sql);
-        }
+        statement.execute(sql);
       }
     } catch (SQLException e) {
       throw new ProgressiveException(e);
@@ -183,7 +202,7 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private List<Column> getColumnsOfTable(Connection connection, String table) {
-    final List<String> columnNames = getColumnNames(connection, table);
+    final List<String> columnNames = getNumericColumnNames(connection, table);
 
     try (PreparedStatement statement =
         connection.prepareStatement(toSql(getSelectMinMax(table, columnNames)))) {
@@ -210,6 +229,48 @@ public abstract class AbstractDriver implements DbDriver {
     }
   }
 
+  private SqlNodeList getSelectColumns(Connection connection, String table) {
+    final List<SqlIdentifier> identifiers = getColumnMetas(connection, table).stream()
+        .map(c -> SqlUtils.getIdentifier(c.getName())).collect(Collectors.toList());
+    return new SqlNodeList(identifiers, SqlParserPos.ZERO);
+  }
+
+  private List<String> getNumericColumnNames(Connection connection, String table) {
+    return getColumnMetas(connection, table).stream().filter(c -> {
+      switch (c.getSqlType()) {
+        case Types.TINYINT:
+        case Types.SMALLINT:
+        case Types.INTEGER:
+        case Types.BIGINT:
+        case Types.FLOAT:
+        case Types.DOUBLE:
+        case Types.REAL:
+          return true;
+        default:
+          return false;
+      }
+    }).map(ColumnMeta::getName).collect(Collectors.toList());
+  }
+
+  protected List<ColumnMeta> getColumnMetas(Connection connection, String table) {
+    try (PreparedStatement statement =
+        connection.prepareStatement(toSql(getSelectAll(table)))) {
+      final List<ColumnMeta> columnMetas = new ArrayList<>();
+      final ResultSetMetaData metaData = statement.getMetaData();
+      try {
+        for (int i = 1; i <= metaData.getColumnCount(); i++) {
+          columnMetas.add(new ColumnMeta(metaData.getColumnName(i), metaData.getColumnType(i),
+              metaData.getScale(i), metaData.getPrecision(i)));
+        }
+      } catch (SQLException e) {
+        throw new ProgressiveException(e);
+      }
+      return columnMetas;
+    } catch (SQLException e) {
+      throw new ProgressiveException(e);
+    }
+  }
+
   private SqlSelect getSelectMinMax(String table, List<String> columnNames) {
     final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
     for (String columnName : columnNames) {
@@ -222,33 +283,13 @@ public abstract class AbstractDriver implements DbDriver {
 
   private SqlBasicCall createAggregator(SqlAggFunction func, String columnName) {
     return new SqlBasicCall(
-        func, new SqlNode[] {new SqlIdentifier(columnName, SqlParserPos.ZERO)}, SqlParserPos.ZERO);
+        func, new SqlNode[]{new SqlIdentifier(columnName, SqlParserPos.ZERO)}, SqlParserPos.ZERO);
   }
 
   protected final void dropTable(Connection connection, String table) {
     try (Statement statement = connection.createStatement()) {
       final String sql = toSql(SqlUtils.dropTable(table));
       statement.execute(sql);
-    } catch (SQLException e) {
-      throw new ProgressiveException(e);
-    }
-  }
-
-  private List<String> getColumnNames(Connection connection, String table) {
-    try (PreparedStatement statement = connection.prepareStatement(toSql(getSelectAll(table)))) {
-      final List<String> columnNames = new ArrayList<>();
-      final ResultSetMetaData metaData = statement.getMetaData();
-
-      for (int i = 1; i <= metaData.getColumnCount(); i++) {
-        switch (metaData.getColumnType(i)) {
-          case Types.SMALLINT:
-          case Types.INTEGER:
-          case Types.BIGINT:
-            columnNames.add(metaData.getColumnName(i));
-        }
-      }
-
-      return columnNames;
     } catch (SQLException e) {
       throw new ProgressiveException(e);
     }
@@ -350,7 +391,7 @@ public abstract class AbstractDriver implements DbDriver {
             where == null
                 ? join
                 : new SqlBasicCall(
-                    SqlStdOperatorTable.AND, new SqlNode[] {where, join}, SqlParserPos.ZERO);
+                    SqlStdOperatorTable.AND, new SqlNode[]{where, join}, SqlParserPos.ZERO);
       }
     } else {
       groups.addAll(getGroupColumnsIdentifiers(connection, baseTable, groupLimit, true));
@@ -438,26 +479,11 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private String getAggregationColumn(Connection connection, String table) {
-    try (PreparedStatement statement = connection.prepareStatement(toSql(getSelectAll(table)))) {
-      final ResultSetMetaData metaData = statement.getMetaData();
-
-      for (int i = 1; i <= metaData.getColumnCount(); i++) {
-        switch (metaData.getColumnType(i)) {
-          case Types.TINYINT:
-          case Types.SMALLINT:
-          case Types.INTEGER:
-          case Types.BIGINT:
-          case Types.FLOAT:
-          case Types.DOUBLE:
-          case Types.REAL:
-            return metaData.getColumnName(i);
-        }
-      }
-
-      throw new IllegalStateException("no aggregation field found for: " + table);
-    } catch (SQLException e) {
-      throw new ProgressiveException(e);
+    final Optional<String> column = getNumericColumnNames(connection, table).stream().findAny();
+    if (!column.isPresent()) {
+      throw new IllegalArgumentException("no aggregation column found: " + table);
     }
+    return column.get();
   }
 
   private List<SqlIdentifier> getGroupColumnsIdentifiers(
@@ -467,6 +493,7 @@ public abstract class AbstractDriver implements DbDriver {
         .collect(Collectors.toList());
   }
 
+  // TODO Use getColumnMetas method
   private List<String> getGroupColumns(
       Connection connection, String table, int limit, boolean numbers) {
     try (PreparedStatement statement = connection.prepareStatement(toSql(getSelectAll(table)))) {
@@ -523,6 +550,7 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   public abstract static class Builder<D extends AbstractDriver, B extends Builder<D, B>> {
+
     private final SqlDialect dialect;
 
     private int partitionSize = -1;

@@ -3,6 +3,7 @@ package de.tuda.progressive.db.driver.impl;
 import de.tuda.progressive.db.driver.PartitionDriver;
 import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.util.SqlUtils;
+import org.apache.calcite.sql.SqlBasicCall;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.dialect.PostgresqlSqlDialect;
@@ -10,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
+import java.util.List;
+import java.util.Set;
 
 public class PostgreSQLDriver extends PartitionDriver {
 
@@ -99,5 +102,15 @@ public class PostgreSQLDriver extends PartitionDriver {
     public PostgreSQLDriver build() {
       return build(new PostgreSQLDriver());
     }
+  }
+
+  @Override
+  protected Set<String> getForeignTables(Connection connection, String baseTable) {
+    return super.getForeignTables(connection, baseTable.toLowerCase());
+  }
+
+  @Override
+  protected List<SqlBasicCall> getJoins(Connection connection, String baseTable) {
+    return super.getJoins(connection, baseTable.toLowerCase());
   }
 }

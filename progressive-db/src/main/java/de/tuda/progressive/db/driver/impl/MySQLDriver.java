@@ -3,13 +3,17 @@ package de.tuda.progressive.db.driver.impl;
 import de.tuda.progressive.db.driver.PartitionDriver;
 import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.SqlDialect;
-import org.apache.calcite.sql.ddl.SqlCreateTable;
-import org.apache.calcite.sql.dialect.MysqlSqlDialect;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
+import org.apache.calcite.sql.SqlDialect;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.ddl.SqlCreateTable;
+import org.apache.calcite.sql.dialect.MysqlSqlDialect;
 
 public class MySQLDriver extends PartitionDriver {
 
@@ -27,6 +31,13 @@ public class MySQLDriver extends PartitionDriver {
       "select t.*, ((@row_number := @row_number + 1) %% %d) row_number from %s t, (select @row_number := 0) rn";
 
   private MySQLDriver() {}
+
+  @Override
+  public String toSql(SqlNode node) {
+    final String sql = super.toSql(node);
+
+    return sql.replaceAll("BETWEEN ASYMMETRIC", "BETWEEN");
+  }
 
   @Override
   public String getPartitionTable(String table) {
