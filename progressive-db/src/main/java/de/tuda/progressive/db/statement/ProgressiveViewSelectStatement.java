@@ -1,9 +1,7 @@
 package de.tuda.progressive.db.statement;
 
 import de.tuda.progressive.db.buffer.SelectDataBuffer;
-import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.util.SqlUtils;
-
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.util.ArrayList;
@@ -11,7 +9,7 @@ import java.util.LinkedList;
 import java.util.List;
 
 public class ProgressiveViewSelectStatement
-    implements ProgressiveStatement<SelectDataBuffer>, ProgressiveListener {
+    implements ProgressiveStatement, ProgressiveListener {
 
   private final ProgressiveViewStatement view;
 
@@ -51,11 +49,6 @@ public class ProgressiveViewSelectStatement
   @Override
   public ResultSetMetaData getMetaData() {
     return dataBuffer.getMetaData();
-  }
-
-  @Override
-  public SelectDataBuffer getDataBuffer() {
-    return dataBuffer;
   }
 
   @Override

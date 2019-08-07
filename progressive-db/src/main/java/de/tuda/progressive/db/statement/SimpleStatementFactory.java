@@ -9,6 +9,7 @@ import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlPrepareTable;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
@@ -198,5 +199,10 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
           throw new IllegalArgumentException("join type not supported: " + join.getJoinType());
       }
     }
+  }
+
+  @Override
+  public ProgressiveStatement prepare(Connection connection, SqlPrepareTable prepare) {
+    return new PrepareStatement(driver, connection, metaData, prepare.getName().getSimple());
   }
 }

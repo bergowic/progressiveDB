@@ -5,13 +5,11 @@ import de.tuda.progressive.db.buffer.SelectDataBuffer;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 
-public interface ProgressiveStatement<T extends SelectDataBuffer> extends AutoCloseable {
+public interface ProgressiveStatement extends AutoCloseable {
 
   ResultSet getResultSet();
 
   ResultSetMetaData getMetaData();
-
-  T getDataBuffer();
 
   boolean isDone();
 

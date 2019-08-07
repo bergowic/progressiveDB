@@ -6,19 +6,22 @@ import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlSelect;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlSelect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public abstract class ProgressiveBaseStatement implements ProgressiveStatement<DataBuffer> {
+public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
   private static final Logger log = LoggerFactory.getLogger(ProgressiveBaseStatement.class);
 
@@ -40,8 +43,6 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
   private boolean isClosed;
 
-  private final Connection connection;
-
   private final SqlSelect selectSource;
 
   private final List<SqlIdentifier> sourceTables;
@@ -55,7 +56,6 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
     this.driver = driver;
     this.dataBuffer = dataBuffer;
     this.partitionInfo = partitionInfo;
-    this.connection = connection;
     this.selectSource = context.getSelectSource();
     this.sourceTables = context.getSourceTables();
     this.currentReadPartitions = getReadPartitions(sourceTables);
@@ -160,8 +160,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
     return metaData;
   }
 
-  @Override
-  public DataBuffer getDataBuffer() {
+  protected DataBuffer getDataBuffer() {
     return dataBuffer;
   }
 

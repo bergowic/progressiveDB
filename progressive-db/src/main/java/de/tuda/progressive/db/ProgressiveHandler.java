@@ -33,8 +33,7 @@ public class ProgressiveHandler {
   }
 
   public ProgressiveStatement handle(SqlPrepareTable prepareTable) {
-    // TODO
-    return null;
+    return statementFactory.prepare(connection, prepareTable);
   }
 
   public ProgressiveStatement handle(SqlCreateProgressiveView createProgressiveView) {
