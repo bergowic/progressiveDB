@@ -24,7 +24,7 @@ public abstract class PartitionDriver extends AbstractDriver {
   private boolean hasPartitions;
 
   @Override
-  protected void createPartitions(Connection connection, String table, int partitions) {
+  protected void createPartitions(Connection connection, String table, long partitions) {
     if (hasPartitions()) {
       dropTable(connection, getPartitionTable(table));
       createPartitionTable(connection, table, partitions);
@@ -33,7 +33,7 @@ public abstract class PartitionDriver extends AbstractDriver {
     }
   }
 
-  protected abstract void createPartitionTable(Connection connection, String table, int partitions);
+  protected abstract void createPartitionTable(Connection connection, String table, long partitions);
 
   @Override
   protected long getPartitionEntries(Connection connection, String table, int partition) {
@@ -58,7 +58,7 @@ public abstract class PartitionDriver extends AbstractDriver {
   }
 
   @Override
-  protected void insertData(Connection connection, String table, int partitions) {
+  protected void insertData(Connection connection, String table, long partitions) {
     if (hasPartitions()) {
       final String template = String.format(getSelectTemplate(), partitions, table);
       insertData(connection, template, getPartitionTable(table));

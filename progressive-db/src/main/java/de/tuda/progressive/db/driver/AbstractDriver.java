@@ -75,9 +75,9 @@ public abstract class AbstractDriver implements DbDriver {
   private List<Partition> split(Connection connection, String table) {
     final List<Partition> partitions = new ArrayList<>();
 
-    for (Map.Entry<String, Integer> entry : getPartitionSizes(connection, table).entrySet()) {
+    for (Map.Entry<String, Long> entry : getPartitionSizes(connection, table).entrySet()) {
       final String currentTable = entry.getKey();
-      final int partitionCount = entry.getValue();
+      final long partitionCount = entry.getValue();
 
       log.info("create {} partitions for table {}", partitionCount, currentTable);
       createPartitions(connection, currentTable, partitionCount);
@@ -93,11 +93,11 @@ public abstract class AbstractDriver implements DbDriver {
     return partitions;
   }
 
-  private SortedMap<String, Integer> getPartitionSizes(Connection connection, String baseTable) {
+  private SortedMap<String, Long> getPartitionSizes(Connection connection, String baseTable) {
     final Set<String> foreignTables = getForeignTables(connection, baseTable);
-    final SortedMap<String, Integer> partitionSizes = new TreeMap<>();
+    final SortedMap<String, Long> partitionSizes = new TreeMap<>();
 
-    int size =
+    long size =
         partitionSize > 0 ? partitionSize : getPartitionSize(connection, baseTable, foreignTables);
 
     partitionSizes.put(baseTable, getPartitionCount(connection, baseTable, size));
@@ -142,7 +142,7 @@ public abstract class AbstractDriver implements DbDriver {
     return joins;
   }
 
-  protected void createPartitions(Connection connection, String table, int partitions) {
+  protected void createPartitions(Connection connection, String table, long partitions) {
     final List<ColumnMeta> columnMetas = getColumnMetas(connection, table);
 
     try (Statement destStatement = connection.createStatement()) {
@@ -160,16 +160,16 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   @Override
-  public String getPartitionTable(String table, int partition) {
+  public String getPartitionTable(String table, long partition) {
     return String.format("%s_%d", getPartitionTable(table), partition);
   }
 
-  protected void insertData(Connection connection, String table, int partitions) {
+  protected void insertData(Connection connection, String table, long partitions) {
     final String template = String.format(getSelectTemplate(), partitions, table);
     insertData(connection, template, table, partitions);
   }
 
-  private void insertData(Connection connection, String template, String table, int partitions) {
+  private void insertData(Connection connection, String template, String table, long partitions) {
     final SqlNodeList columns = getSelectColumns(connection, table);
 
     try (Statement statement = connection.createStatement()) {
@@ -187,10 +187,10 @@ public abstract class AbstractDriver implements DbDriver {
 
   protected abstract String getSelectTemplate();
 
-  private int getPartitionCount(Connection connection, String table, int partitionSize) {
+  private long getPartitionCount(Connection connection, String table, long partitionSize) {
     log.info("get count of partitions of table {} with size {}", table, partitionSize);
     final long count = getCount(connection, table);
-    return (int) Math.ceil(((double) count / (double) partitionSize));
+    return (long) Math.ceil(((double) count / (double) partitionSize));
   }
 
   private List<Column> getColumns(Connection connection, String baseTable) {
@@ -298,7 +298,7 @@ public abstract class AbstractDriver implements DbDriver {
   }
 
   private List<Partition> getPartitions(
-      Connection connection, String table, int partitionCount, boolean isFact) {
+      Connection connection, String table, long partitionCount, boolean isFact) {
     final List<Partition> partitions = new ArrayList<>();
     for (int i = 0; i < partitionCount; i++) {
       final String partitionName = getPartitionTable(table, i);
@@ -369,7 +369,7 @@ public abstract class AbstractDriver implements DbDriver {
         null);
   }
 
-  private int getPartitionSize(Connection connection, String baseTable, Set<String> foreignTables) {
+  private long getPartitionSize(Connection connection, String baseTable, Set<String> foreignTables) {
     final String aggregationColumn = getAggregationColumn(connection, baseTable);
     final List<SqlIdentifier> groups = new ArrayList<>();
     final int groupLimit = Math.max(5, foreignTables.size());
@@ -404,7 +404,7 @@ public abstract class AbstractDriver implements DbDriver {
         SqlStdOperatorTable.AVG.createCall(
             SqlParserPos.ZERO, SqlUtils.getIdentifier(aggregationColumn)));
 
-    int size = 1000000;
+    long size = 1000000;
     int targetTime = 400;
 
     for (; ; ) {
@@ -464,10 +464,10 @@ public abstract class AbstractDriver implements DbDriver {
 
       time /= RUNS;
 
-      int newSize = (int) (size * ((double) targetTime / (double) time));
-      int deviation = newSize / 10;
-      int tail = (int) Math.floor(Math.log10(newSize) - 1);
-      int leading = (int) (newSize / Math.pow(10, tail));
+      long newSize = (int) (size * ((double) targetTime / (double) time));
+      long deviation = newSize / 10;
+      long tail = (int) Math.floor(Math.log10(newSize) - 1);
+      long leading = (int) (newSize / Math.pow(10, tail));
       newSize = leading * (int) Math.pow(10, tail);
 
       if (size >= newSize - deviation && size <= newSize + deviation) {

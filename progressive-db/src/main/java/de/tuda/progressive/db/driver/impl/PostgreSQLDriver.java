@@ -39,7 +39,7 @@ public class PostgreSQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void createPartitionTable(Connection connection, String table, int partitions) {
+  protected void createPartitionTable(Connection connection, String table, long partitions) {
     final String partitionTable = getPartitionTable(table);
 
     createPartitionTable(connection, table, partitionTable);

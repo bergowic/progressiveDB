@@ -9,7 +9,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.stream.LongStream;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
@@ -30,7 +30,8 @@ public class MySQLDriver extends PartitionDriver {
   private static final String SELECT_TPL =
       "select t.*, ((@row_number := @row_number + 1) %% %d) row_number from %s t, (select @row_number := 0) rn";
 
-  private MySQLDriver() {}
+  private MySQLDriver() {
+  }
 
   @Override
   public String toSql(SqlNode node) {
@@ -45,7 +46,7 @@ public class MySQLDriver extends PartitionDriver {
   }
 
   @Override
-  protected void createPartitionTable(Connection connection, String table, int partitions) {
+  protected void createPartitionTable(Connection connection, String table, long partitions) {
     try (PreparedStatement srcStatement = connection.prepareStatement(toSql(getSelectAll(table)))) {
       final ResultSetMetaData metaData = srcStatement.getMetaData();
       final SqlCreateTable createTable =
@@ -55,9 +56,9 @@ public class MySQLDriver extends PartitionDriver {
               PART_DEF,
               String.join(
                   ", ",
-                  IntStream.range(0, partitions)
+                  LongStream.range(0, partitions)
                       .mapToObj(i -> String.format(PART_SINGLE_TPL, getPartitionTable(table, i), i))
-                      .collect(Collectors.toList())));
+                      .collect(Collectors.joining())));
       final String createTableSql = String.format("%s %s", toSql(createTable), partitionsDef);
 
       try (Statement destStatement = connection.createStatement()) {
@@ -79,6 +80,7 @@ public class MySQLDriver extends PartitionDriver {
   }
 
   public static class Builder extends PartitionDriver.Builder<MySQLDriver, Builder> {
+
     public Builder() {
       this(SQL_DIALECT);
     }

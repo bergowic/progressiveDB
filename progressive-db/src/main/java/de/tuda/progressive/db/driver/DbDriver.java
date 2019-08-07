@@ -16,7 +16,7 @@ public interface DbDriver {
 
   String getPartitionTable(String table);
 
-  String getPartitionTable(String table, int partition);
+  String getPartitionTable(String table, long partition);
 
   boolean hasUpsert();
 
