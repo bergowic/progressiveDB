@@ -19,6 +19,6 @@ class MySQLDriverTest extends PartitionDriverTest {
 
   @Override
   protected PartitionDriver.Builder getDriver() {
-    return new MySQLDriver.Builder();
+    return new MySQLDriver.Builder().hasPartitions(false);
   }
 }

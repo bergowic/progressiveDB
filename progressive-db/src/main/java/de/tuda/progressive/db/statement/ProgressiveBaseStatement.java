@@ -22,7 +22,7 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement<D
 
   private static final Logger log = LoggerFactory.getLogger(ProgressiveBaseStatement.class);
 
-  private static final ExecutorService executor = Executors.newCachedThreadPool();
+  private static final ExecutorService executor = Executors.newScheduledThreadPool(5);
 
   private final DbDriver driver;
 

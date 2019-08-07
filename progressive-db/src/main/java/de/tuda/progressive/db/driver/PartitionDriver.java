@@ -16,8 +16,6 @@ import java.sql.Statement;
 
 public abstract class PartitionDriver extends AbstractDriver {
 
-  protected static final String PART_COLUMN_NAME = "_partition";
-
   protected static final SqlNode PART_COLUMN =
       SqlUtils.createColumn(PART_COLUMN_NAME, SqlTypeName.INTEGER, 8, 0);
 

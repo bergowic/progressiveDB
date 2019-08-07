@@ -19,6 +19,6 @@ class PostgreSQLDriverTest extends PartitionDriverTest {
 
   @Override
   protected PartitionDriver.Builder getDriver() {
-    return new PostgreSQLDriver.Builder();
+    return new PostgreSQLDriver.Builder().hasPartitions(false);
   }
 }

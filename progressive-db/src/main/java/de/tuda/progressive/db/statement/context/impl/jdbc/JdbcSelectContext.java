@@ -64,7 +64,7 @@ public class JdbcSelectContext extends JdbcBufferContext {
 
     private SqlUpdate updateBuffer;
 
-    private boolean prepareSelect;
+    private boolean prepareSelect = true;
 
     public Builder createBuffer(SqlCreateTable createBuffer) {
       this.createBuffer = createBuffer;

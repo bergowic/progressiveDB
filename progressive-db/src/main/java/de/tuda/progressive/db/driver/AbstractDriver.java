@@ -45,6 +45,8 @@ public abstract class AbstractDriver implements DbDriver {
 
   private static final Logger log = LoggerFactory.getLogger(AbstractDriver.class);
 
+  protected static final String PART_COLUMN_NAME = "_partition";
+
   private static final String INSERT_PART_TPL =
       "insert into %s select %s from (%s) t where row_number = %d";
 

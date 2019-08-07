@@ -10,11 +10,6 @@ import de.tuda.progressive.db.statement.context.ContextFactory;
 import de.tuda.progressive.db.statement.context.MetaField;
 import de.tuda.progressive.db.util.MetaFieldUtils;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.*;
-import org.apache.calcite.sql.fun.SqlStdOperatorTable;
-import org.apache.calcite.sql.parser.SqlParserPos;
-import org.apache.calcite.sql.type.SqlTypeName;
-
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -23,9 +18,25 @@ import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
+import org.apache.calcite.sql.JoinConditionType;
+import org.apache.calcite.sql.JoinType;
+import org.apache.calcite.sql.SqlAsOperator;
+import org.apache.calcite.sql.SqlBasicCall;
+import org.apache.calcite.sql.SqlDynamicParam;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlJoin;
+import org.apache.calcite.sql.SqlKind;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlOperator;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+import org.apache.calcite.sql.parser.SqlParserPos;
+import org.apache.calcite.sql.type.SqlTypeName;
 
 public abstract class BaseContextFactory<
-        C1 extends JdbcSourceContext, C2 extends BaseContext, D extends DataBuffer>
+    C1 extends JdbcSourceContext, C2 extends BaseContext, D extends DataBuffer>
     implements ContextFactory<C1, C2, D> {
 
   protected final DbDriver sourceDriver;
@@ -210,8 +221,7 @@ public abstract class BaseContextFactory<
       if (sourceDriver.hasPartitions()) {
         return SqlUtils.getIdentifier(sourceDriver.getPartitionTable(identifier.getSimple()));
       } else {
-        // TODO
-        throw new UnsupportedOperationException("only driver with partitioning are supported");
+        return identifier;
       }
     } else if (node instanceof SqlJoin) {
       final SqlJoin join = (SqlJoin) node;
@@ -241,7 +251,7 @@ public abstract class BaseContextFactory<
       if (call.getOperator() instanceof SqlAsOperator) {
         return new SqlBasicCall(
             SqlStdOperatorTable.AS,
-            new SqlNode[] {removeFuture(operands[0]), operands[1]},
+            new SqlNode[]{removeFuture(operands[0]), operands[1]},
             SqlParserPos.ZERO);
       }
     }
@@ -261,7 +271,7 @@ public abstract class BaseContextFactory<
     }
 
     return new SqlBasicCall(
-        SqlStdOperatorTable.AND, new SqlNode[] {where, eqPartition}, SqlParserPos.ZERO);
+        SqlStdOperatorTable.AND, new SqlNode[]{where, eqPartition}, SqlParserPos.ZERO);
   }
 
   private SqlBasicCall createWhereEqPartition(SqlNode node) {
@@ -270,10 +280,10 @@ public abstract class BaseContextFactory<
 
       return new SqlBasicCall(
           SqlStdOperatorTable.EQUALS,
-          new SqlNode[] {
-            new SqlIdentifier(
-                Arrays.asList(identifier.getSimple(), "_partition"), SqlParserPos.ZERO),
-            new SqlDynamicParam(0, SqlParserPos.ZERO)
+          new SqlNode[]{
+              new SqlIdentifier(
+                  Arrays.asList(identifier.getSimple(), "_partition"), SqlParserPos.ZERO),
+              new SqlDynamicParam(0, SqlParserPos.ZERO)
           },
           SqlParserPos.ZERO);
     } else if (node instanceof SqlJoin) {
@@ -281,8 +291,8 @@ public abstract class BaseContextFactory<
 
       return new SqlBasicCall(
           SqlStdOperatorTable.AND,
-          new SqlNode[] {
-            createWhereEqPartition(join.getLeft()), createWhereEqPartition(join.getRight())
+          new SqlNode[]{
+              createWhereEqPartition(join.getLeft()), createWhereEqPartition(join.getRight())
           },
           SqlParserPos.ZERO);
     } else {
@@ -312,57 +322,55 @@ public abstract class BaseContextFactory<
 
     final SqlBasicCall call = (SqlBasicCall) node;
     switch (call.getOperator().getName()) {
-      case "AND":
-        {
-          FutureType leftFuture = getFutureType(call.getOperands()[0]);
-          FutureType rightFuture = getFutureType(call.getOperands()[1]);
-          boolean reverse = add && leftFuture == FutureType.FULL && rightFuture == FutureType.FULL;
+      case "AND": {
+        FutureType leftFuture = getFutureType(call.getOperands()[0]);
+        FutureType rightFuture = getFutureType(call.getOperands()[1]);
+        boolean reverse = add && leftFuture == FutureType.FULL && rightFuture == FutureType.FULL;
 
-          final SqlBasicCall left =
-              resolveWhereFutures(futures, call.getOperands()[0], reverse, inFuture);
-          final SqlBasicCall right =
-              resolveWhereFutures(futures, call.getOperands()[1], reverse, inFuture);
+        final SqlBasicCall left =
+            resolveWhereFutures(futures, call.getOperands()[0], reverse, inFuture);
+        final SqlBasicCall right =
+            resolveWhereFutures(futures, call.getOperands()[1], reverse, inFuture);
 
-          if (left == null) {
-            return right;
-          } else if (right == null) {
-            return left;
-          } else {
-            return new SqlBasicCall(
-                reverse ? SqlStdOperatorTable.OR : SqlStdOperatorTable.AND,
-                new SqlNode[] {left, right},
-                SqlParserPos.ZERO);
-          }
+        if (left == null) {
+          return right;
+        } else if (right == null) {
+          return left;
+        } else {
+          return new SqlBasicCall(
+              reverse ? SqlStdOperatorTable.OR : SqlStdOperatorTable.AND,
+              new SqlNode[]{left, right},
+              SqlParserPos.ZERO);
         }
-      case "OR":
-        {
-          FutureType leftFuture = getFutureType(call.getOperands()[0]);
-          FutureType rightFuture = getFutureType(call.getOperands()[1]);
-          boolean newAdd = add || (leftFuture == FutureType.FULL ^ rightFuture == FutureType.FULL);
+      }
+      case "OR": {
+        FutureType leftFuture = getFutureType(call.getOperands()[0]);
+        FutureType rightFuture = getFutureType(call.getOperands()[1]);
+        boolean newAdd = add || (leftFuture == FutureType.FULL ^ rightFuture == FutureType.FULL);
 
-          final SqlBasicCall left =
-              resolveWhereFutures(futures, call.getOperands()[0], newAdd, inFuture);
+        final SqlBasicCall left =
+            resolveWhereFutures(futures, call.getOperands()[0], newAdd, inFuture);
 
-          if (leftFuture == FutureType.NONE && rightFuture == FutureType.FULL) {
-            futures.add(left);
-          }
-
-          final SqlBasicCall right =
-              resolveWhereFutures(futures, call.getOperands()[1], newAdd, inFuture);
-
-          if (leftFuture == FutureType.FULL && rightFuture == FutureType.NONE) {
-            futures.add(right);
-          }
-
-          if (left == null) {
-            return right;
-          } else if (right == null) {
-            return left;
-          } else {
-            return new SqlBasicCall(
-                SqlStdOperatorTable.OR, new SqlNode[] {left, right}, SqlParserPos.ZERO);
-          }
+        if (leftFuture == FutureType.NONE && rightFuture == FutureType.FULL) {
+          futures.add(left);
         }
+
+        final SqlBasicCall right =
+            resolveWhereFutures(futures, call.getOperands()[1], newAdd, inFuture);
+
+        if (leftFuture == FutureType.FULL && rightFuture == FutureType.NONE) {
+          futures.add(right);
+        }
+
+        if (left == null) {
+          return right;
+        } else if (right == null) {
+          return left;
+        } else {
+          return new SqlBasicCall(
+              SqlStdOperatorTable.OR, new SqlNode[]{left, right}, SqlParserPos.ZERO);
+        }
+      }
       default:
         if (!inFuture || add) {
           return call;

@@ -37,6 +37,7 @@ public class SQLiteDriver extends AbstractDriver {
   public SqlTypeName toSqlType(int jdbcType) {
     switch (jdbcType) {
       case Types.NULL:
+      case Types.NUMERIC:
         return SqlTypeName.VARCHAR;
     }
     return null;
@@ -81,7 +82,7 @@ public class SQLiteDriver extends AbstractDriver {
 
   @Override
   public String getPartitionTable(String table) {
-    return table;
+    return table + PART_COLUMN_NAME;
   }
 
   @Override

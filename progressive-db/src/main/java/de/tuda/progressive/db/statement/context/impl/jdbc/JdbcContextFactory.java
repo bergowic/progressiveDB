@@ -12,7 +12,33 @@ import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.MetaFieldUtils;
 import de.tuda.progressive.db.util.SqlUtils;
-import org.apache.calcite.sql.*;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
+import org.apache.calcite.sql.JoinConditionType;
+import org.apache.calcite.sql.JoinType;
+import org.apache.calcite.sql.SqlBasicCall;
+import org.apache.calcite.sql.SqlDynamicParam;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlInsert;
+import org.apache.calcite.sql.SqlJoin;
+import org.apache.calcite.sql.SqlLiteral;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlNodeList;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.calcite.sql.SqlUpdate;
 import org.apache.calcite.sql.ddl.SqlCreateTable;
 import org.apache.calcite.sql.ddl.SqlDdlNodes;
 import org.apache.calcite.sql.fun.SqlStdOperatorTable;
@@ -22,15 +48,6 @@ import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.commons.lang3.tuple.Triple;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSetMetaData;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 public class JdbcContextFactory
     extends BaseContextFactory<JdbcSelectContext, JdbcSourceContext, JdbcDataBuffer> {
@@ -59,7 +76,7 @@ public class JdbcContextFactory
     final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
     final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
-    final String sql = sourceDriver.toSql(selectSource);
+    final String sql = getPrepareSql(selectSource);
 
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       final ResultSetMetaData metaData = statement.getMetaData();
@@ -77,7 +94,6 @@ public class JdbcContextFactory
           .fieldNames(fieldNames)
           .createBuffer(createBuffer)
           .selectBuffer(selectBuffer)
-          .prepareSelect(true)
           .build();
     } catch (SQLException e) {
       // TODO
@@ -120,7 +136,7 @@ public class JdbcContextFactory
     final boolean hasAggregation = MetaFieldUtils.hasAggregation(metaFields);
     final SqlNodeList indexColumns = getIndexColumns(metaFields, hasAggregation);
     final Map<Integer, Pair<Integer, Integer>> bounds = getBounds(columnMapper, metaFields, select);
-    final String sql = sourceDriver.toSql(selectSource);
+    final String sql = getPrepareSql(selectSource);
 
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       final ResultSetMetaData metaData = statement.getMetaData();
@@ -139,10 +155,37 @@ public class JdbcContextFactory
           .selectBuffer(selectBuffer)
           .metaFields(metaFields)
           .fieldNames(fieldNames)
+          .prepareSelect(false)
           .build();
     } catch (SQLException e) {
       // TODO
       throw new RuntimeException(e);
+    }
+  }
+
+  private String getPrepareSql(SqlSelect select) {
+    if (!sourceDriver.hasPartitions()) {
+      select = (SqlSelect) select.clone(SqlParserPos.ZERO);
+      select.setFrom(transformFromPrepare(select.getFrom()));
+    }
+    return sourceDriver.toSql(select);
+  }
+
+  private SqlNode transformFromPrepare(SqlNode node) {
+    if (node instanceof SqlIdentifier) {
+      final SqlIdentifier identifier = (SqlIdentifier) node;
+      return SqlUtils.getIdentifier(sourceDriver.getPartitionTable(identifier.getSimple(), 0));
+    } else {
+      final SqlJoin join = (SqlJoin) node;
+      // TODO currently just comma supported
+      return new SqlJoin(
+          SqlParserPos.ZERO,
+          transformFromPrepare(join.getLeft()),
+          SqlLiteral.createBoolean(false, SqlParserPos.ZERO),
+          JoinType.COMMA.symbol(SqlParserPos.ZERO),
+          transformFromPrepare(join.getRight()),
+          JoinConditionType.NONE.symbol(SqlParserPos.ZERO),
+          null);
     }
   }
 
@@ -331,7 +374,7 @@ public class JdbcContextFactory
             return ImmutablePair.of(
                 new SqlBasicCall(
                     call.getOperator(),
-                    new SqlNode[] {left.getLeft(), right.getLeft()},
+                    new SqlNode[]{left.getLeft(), right.getLeft()},
                     SqlParserPos.ZERO),
                 newIndex);
           }
@@ -339,9 +382,9 @@ public class JdbcContextFactory
           return ImmutablePair.of(
               new SqlBasicCall(
                   SqlStdOperatorTable.EQUALS,
-                  new SqlNode[] {
-                    SqlUtils.getIdentifier(getMetaFieldName(index, MetaField.FUTURE_WHERE)),
-                    SqlLiteral.createExactNumeric("1", SqlParserPos.ZERO)
+                  new SqlNode[]{
+                      SqlUtils.getIdentifier(getMetaFieldName(index, MetaField.FUTURE_WHERE)),
+                      SqlLiteral.createExactNumeric("1", SqlParserPos.ZERO)
                   },
                   SqlParserPos.ZERO),
               index + 1);
@@ -481,11 +524,11 @@ public class JdbcContextFactory
 
     if (columnIndexes.size() > 0) {
       additionalColumns =
-          new SqlNode[] {
-            SqlDdlNodes.primary(
-                SqlParserPos.ZERO,
-                new SqlIdentifier("pk_" + bufferTableName, SqlParserPos.ZERO),
-                columnIndexes)
+          new SqlNode[]{
+              SqlDdlNodes.primary(
+                  SqlParserPos.ZERO,
+                  new SqlIdentifier("pk_" + bufferTableName, SqlParserPos.ZERO),
+                  columnIndexes)
           };
     } else {
       additionalColumns = new SqlNode[0];
@@ -627,7 +670,7 @@ public class JdbcContextFactory
       } else {
         updateValues.add(
             new SqlBasicCall(
-                SqlStdOperatorTable.PLUS, new SqlNode[] {column, param}, SqlParserPos.ZERO));
+                SqlStdOperatorTable.PLUS, new SqlNode[]{column, param}, SqlParserPos.ZERO));
       }
     }
 
@@ -695,7 +738,7 @@ public class JdbcContextFactory
       } else {
         values.add(
             new SqlBasicCall(
-                SqlStdOperatorTable.PLUS, new SqlNode[] {column, param}, SqlParserPos.ZERO));
+                SqlStdOperatorTable.PLUS, new SqlNode[]{column, param}, SqlParserPos.ZERO));
       }
     }
 
@@ -728,43 +771,41 @@ public class JdbcContextFactory
 
     final SqlBasicCall call = (SqlBasicCall) node;
     switch (call.getOperator().getName()) {
-      case "AND":
-        {
-          FutureType leftFuture = getFutureType(call.getOperands()[0]);
-          FutureType rightFuture = getFutureType(call.getOperands()[1]);
+      case "AND": {
+        FutureType leftFuture = getFutureType(call.getOperands()[0]);
+        FutureType rightFuture = getFutureType(call.getOperands()[1]);
 
-          final SqlNode left =
-              resolveWhereFutures(call.getOperands()[0], leftFuture == FutureType.FULL);
-          final SqlNode right =
-              resolveWhereFutures(call.getOperands()[1], rightFuture == FutureType.FULL);
+        final SqlNode left =
+            resolveWhereFutures(call.getOperands()[0], leftFuture == FutureType.FULL);
+        final SqlNode right =
+            resolveWhereFutures(call.getOperands()[1], rightFuture == FutureType.FULL);
 
-          if (left == null) {
-            return right;
-          } else if (right == null) {
-            return left;
-          } else {
-            return new SqlBasicCall(
-                SqlStdOperatorTable.AND, new SqlNode[] {left, right}, SqlParserPos.ZERO);
-          }
+        if (left == null) {
+          return right;
+        } else if (right == null) {
+          return left;
+        } else {
+          return new SqlBasicCall(
+              SqlStdOperatorTable.AND, new SqlNode[]{left, right}, SqlParserPos.ZERO);
         }
-      case "OR":
-        {
-          FutureType leftFuture = getFutureType(call.getOperands()[0]);
-          FutureType rightFuture = getFutureType(call.getOperands()[1]);
-          boolean newAdd = leftFuture == FutureType.FULL || rightFuture == FutureType.FULL;
+      }
+      case "OR": {
+        FutureType leftFuture = getFutureType(call.getOperands()[0]);
+        FutureType rightFuture = getFutureType(call.getOperands()[1]);
+        boolean newAdd = leftFuture == FutureType.FULL || rightFuture == FutureType.FULL;
 
-          final SqlNode left = resolveWhereFutures(call.getOperands()[0], newAdd);
-          final SqlNode right = resolveWhereFutures(call.getOperands()[1], newAdd);
+        final SqlNode left = resolveWhereFutures(call.getOperands()[0], newAdd);
+        final SqlNode right = resolveWhereFutures(call.getOperands()[1], newAdd);
 
-          if (left == null) {
-            return right;
-          } else if (right == null) {
-            return left;
-          } else {
-            return new SqlBasicCall(
-                SqlStdOperatorTable.OR, new SqlNode[] {left, right}, SqlParserPos.ZERO);
-          }
+        if (left == null) {
+          return right;
+        } else if (right == null) {
+          return left;
+        } else {
+          return new SqlBasicCall(
+              SqlStdOperatorTable.OR, new SqlNode[]{left, right}, SqlParserPos.ZERO);
         }
+      }
       default:
         if (add) {
           if (isFuture) {

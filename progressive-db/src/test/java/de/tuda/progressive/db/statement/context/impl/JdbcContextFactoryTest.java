@@ -47,13 +47,13 @@ class JdbcContextFactoryTest {
     try (Statement statement = sourceConnection.createStatement()) {
       statement.execute(driver.toSql(SqlUtils.dropTable("t")));
       statement.execute("create table t (a integer, b integer, c varchar(100))");
-      statement.execute("create table t_0 (a integer, b integer, c varchar(100))");
-      statement.execute("create table t_1 (a integer, b integer, c varchar(100))");
-      statement.execute("insert into t_0 values (1, 2, 'a')");
-      statement.execute("insert into t_0 values (3, 4, 'b')");
-      statement.execute("insert into t_1 values (5, 6, 'a')");
-      statement.execute("insert into t_1 values (7, 8, 'b')");
-      statement.execute("insert into t_1 values (9, 10, 'c')");
+      statement.execute("create table t_partition_0 (a integer, b integer, c varchar(100))");
+      statement.execute("create table t_partition_1 (a integer, b integer, c varchar(100))");
+      statement.execute("insert into t_partition_0 values (1, 2, 'a')");
+      statement.execute("insert into t_partition_0 values (3, 4, 'b')");
+      statement.execute("insert into t_partition_1 values (5, 6, 'a')");
+      statement.execute("insert into t_partition_1 values (7, 8, 'b')");
+      statement.execute("insert into t_partition_1 values (9, 10, 'c')");
     }
   }
 
