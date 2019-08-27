@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ProgressiveDB - Demo</title>
+
+  <link rel="stylesheet" type="text/css" href="assets/bootstrap/4.2.1/css/bootstrap.min.css"/>
+  <link rel="stylesheet" type="text/css" href="css/d3.css"/>
+</head>
+<body>
+
+<div class="">
+  <div id="header" class="container-fluid">
+    <div class="row">
+      <div class="col-md-8 offset-md-2">
+        <h3>Query Console</h3>
+      </div>
+      <div class="col-md-2 offset-md">
+        <button class="btn btn-primary" style="width: 140px; margin-bottom: 10px" onclick="window.open('log.html', '_blank', 'width=710,height=490,left=680,top=360');">Query Log</button>
+        <br />
+        <button class="btn btn-primary" style="width: 140px;" onclick="back()">Back</button>
+      </div>
+    </div>
+  </div>
+  <div id="body" class="container-fluid">
+    <div class="row">
+      <pre style="font-size: 20px">
+CREATE PROGRESSIVE VIEW PV AS SELECT
+  AVG(DEPDELAY) DEPDELAY, DAYOFWEEK FUTURE,
+  PROGRESSIVE_PARTITION(), PROGRESSIVE_PROGRESS(),
+  PROGRESSIVE_CONFIDENCE(DEPDELAY)
+FROM ONTIME1M
+WHERE (ORIGIN = 'ATL') FUTURE OR (ORIGIN = 'JFK') FUTURE OR (ORIGIN = 'LAX') FUTURE
+GROUP BY DAYOFWEEK FUTURE
+      </pre>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-12">
+      <form>
+        <div class="form-group">
+          <label for="input-sql"><b>SQL:</b></label>
+          <textarea class="form-control" id="input-sql" rows="3" style="font-size: 20px">select progressive * from pv</textarea>
+        </div>
+        <div class="form-group">
+        <button id="btn-run" type="button" class="btn btn-success" onclick="run()">RUN</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  <div class="row">
+    <div class="col-md-12" style="font-size: 16px">
+      <div id="div-error" class="alert alert-danger" style="display: none"></div>
+      <table id="table-result" class="table" style="display: none">
+        <tbody style="/*display: block; height: 300px;*/ overflow: scroll; width: 100%">
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+  const tableResult = document.getElementById('table-result');
+  const tBody = tableResult.getElementsByTagName('tbody')[0];
+  const inputSql = document.getElementById('input-sql');
+  const btnRun = document.getElementById('btn-run');
+  const divError = document.getElementById('div-error');
+
+  let columns = [];
+  let id = 0;
+
+  const socket = new WebSocket('ws://' + window.location.hostname + ':8081/console');
+  socket.onopen = () => {
+
+  };
+
+  socket.onerror = (error) => {
+    console.log('WebSocket Error ' + error);
+  };
+
+  socket.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+
+    if (data.id !== id) {
+      return;
+    }
+
+    btnRun.removeAttribute('disabled');
+
+/*    while (tableResult.rows.length > 0) {
+      tableResult.deleteRow(0);
+    }
+*/
+    if (data.error) {
+      divError.style.display = 'block';
+      divError.innerHTML = data.error;
+    } else {
+      tableResult.style.display = 'block';
+      if (tableResult.rows.length === 0) {
+        const header = tableResult.createTHead();
+        const row = header.insertRow();
+
+        Object.keys(data.row).forEach(key => {
+          const cell = row.insertCell();
+          const b = document.createElement('b');
+          b.innerHTML = key;
+          cell.innerHTML = '<b>' + key + '</b>';
+          columns.push(key);
+        });
+      } else {
+        if (tableResult.rows.length > 100) {
+          tableResult.deleteRow(100);
+        }
+      }
+
+      //    data.entries.forEach(entry => {
+      (() => {
+        const row = tBody.insertRow(0);
+        columns.forEach(col => {
+          const cell = row.insertCell();
+          cell.innerHTML = data.row[col];
+        });
+      })();
+    }
+//    });
+  };
+
+  function back() {
+    window.open('index.html', '_self');
+  }
+
+  function run() {
+    const sql = inputSql.value;
+    id++;
+    socket.send(JSON.stringify({ sql, id }));
+    columns = [];
+    tableResult.deleteTHead();
+    while (tableResult.rows.length > 0) {
+      tableResult.deleteRow(0)
+    }
+    btnRun.setAttribute('disabled', 'disabled');
+    tableResult.style.display = 'none';
+    divError.style.display = 'none';
+  }
+</script>
+</body>
+</html>

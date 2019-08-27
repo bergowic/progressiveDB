@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <title>ProgressiveDB - Demo</title>
 
-  <link rel="stylesheet" type="text/css" href="css/libs/bootstrap.min.css"/>
+  <link rel="stylesheet" type="text/css" href="assets/bootstrap/4.2.1/css/bootstrap.min.css"/>
   <link rel="stylesheet" type="text/css" href="css/d3.css"/>
 </head>
 <body>
@@ -15,37 +15,26 @@
       <div class="col-md-6 offset-md-3">
         <form>
           <div class="form-group row">
-            <label class="col-md-2">DB Engine:</label>
-            <div class="col-md-10">
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" name="db" type="radio" id="db-postgresql" value="postgresql">
-                <label class="form-check-label" for="db-postgresql">PostgreSQL</label>
-              </div>
-              <div class="form-check form-check-inline">
-                <input class="form-check-input" name="db" type="radio" id="db-mysql" value="mysql">
-                <label class="form-check-label" for="db-mysql">MySQL</label>
-              </div>
-            </div>
-          </div>
-          <div class="form-group row">
             <label class="col-md-2" for="query-select">Query:</label>
-            <select id="query-select" class="form-control col-md-10">
+            <select id="query-select" class="form-control col-md-8">
               <option value="" disabled selected>Select a Query</option>
               <br />
-              <option>Average Arrival Delay per Airport</option>
-              <option>Average Departure Delay per Airport</option>
-              <option>Departures per Airport</option>
-              <option>Arrivals per Airport</option>
-              <option>Average Arrival Delay per Month</option>
-              <option>Average Departure Delay per Month</option>
+              <option value="0">Average Departure Delay per Airport and Weekday</option>
+              <option value="1">Average Departure Delay per Airport and Year / Month</option>
             </select>
+            <div id="view-switch-container" class="form-control col-md-2">
+              <div class="custom-control custom-switch">
+                <input id="view-switch" type="checkbox" class="custom-control-input" id="view-switch">
+                <label class="custom-control-label" for="view-switch">View</label>
+              </div>
+            </div>
           </div>
         </form>
       </div>
       <div class="col-md-2 offset-md-1">
         <button class="btn btn-primary" style="width: 140px; margin-bottom: 10px" onclick="window.open('log.html', '_blank', 'width=710,height=490,left=680,top=360');">Query Log</button>
         <br />
-        <button class="btn btn-primary" style="width: 140px;" onclick="window.open('view.html', '_blank', 'width=' + window.outerWidth / 2 + ',height=' + (window.outerHeight - 100) + ',left=0,top=0');">Query Steering</button>
+        <button class="btn btn-primary" style="width: 140px;" onclick="window.open('console.html', '_self');">Query Console</button>
       </div>
     </div>
   </div>
@@ -108,19 +97,42 @@
     </div>
   </div>
 </div>
-<script src="bundle.js"></script>
+
 <script>
-  document.getElementById('query-select').onchange = () => {
+  window.webjars = {
+    path: (name, path) => {
+      console.log('path', name, path);
+      switch (name) {
+        case 'd3js': return 'assets/d3js/5.9.7/' + path;
+        default: return null;
+      }
+    }
+  }
+</script>
+
+<script src="assets/requirejs/2.3.6/require.min.js"></script>
+<script src="assets/d3js/5.9.7/webjars-requirejs.js"></script>
+<script src="js/app.js"></script>
+<script>
+  document.getElementById('query-select').onchange = changeQuery;
+  document.getElementById('view-switch').onchange = changeQuery;
+
+  function changeQuery() {
     const headerHeight = document.getElementById('header').clientHeight;
     const windowHeight = window.innerHeight;
     document.getElementById('progressive').style.height = (windowHeight - headerHeight - 50) + 'px';
     document.getElementById('native').style.height = (windowHeight - headerHeight - 50) + 'px';
-    document.getElementById('progressive').style.display = 'block';
-    document.getElementById('native').style.display = 'block';
 
-    start(true);
-    start(false);
-  };
+    const queryId = parseInt(document.getElementById('query-select').value);
+    const view = document.getElementById('view-switch').checked;
+
+    if (!isNaN(queryId)) {
+      document.getElementById('progressive').style.display = 'block';
+      document.getElementById('native').style.display = 'block';
+
+      query(queryId, view);
+    }
+  }
 </script>
 </body>
 </html>

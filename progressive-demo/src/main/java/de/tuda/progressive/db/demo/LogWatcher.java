@@ -19,7 +19,11 @@ public class LogWatcher {
   private final Set<Listener> listeners = new HashSet<>();
 
   public LogWatcher(String path) throws IOException {
-    this.file = new File(path);
+    this(new File(path));
+  }
+
+  public LogWatcher(File file) throws IOException {
+    this.file = file;
 
     file.delete();
     file.createNewFile();
@@ -27,32 +31,30 @@ public class LogWatcher {
 
   public void start() {
     new Thread(
-            () -> {
-              try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-                String line;
+        () -> {
+          try (BufferedReader br = new BufferedReader(new FileReader(file))) {
+            String line;
 
-                WatchService watchService = FileSystems.getDefault().newWatchService();
+            WatchService watchService = FileSystems.getDefault().newWatchService();
 
-                file.getParentFile()
-                    .toPath()
-                    .register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
+            file.getParentFile()
+                .toPath()
+                .register(watchService, StandardWatchEventKinds.ENTRY_MODIFY);
 
-                WatchKey key;
-                while ((key = watchService.take()) != null) {
-                  for (WatchEvent<?> event : key.pollEvents()) {
-                    while ((line = br.readLine()) != null) {
-                      if (line.startsWith("SELECT")) {
-                        String log = line.replace(", 0 AS PARTITION", "");
-                        listeners.forEach(l -> l.notify(log));
-                      }
-                    }
-                  }
-                  key.reset();
+            WatchKey key;
+            while ((key = watchService.take()) != null) {
+              for (WatchEvent<?> event : key.pollEvents()) {
+                while ((line = br.readLine()) != null) {
+                  final String log = line;
+                  listeners.forEach(l -> l.notify(log));
                 }
-              } catch (Exception e) {
-                e.printStackTrace();
               }
-            })
+              key.reset();
+            }
+          } catch (Exception e) {
+            e.printStackTrace();
+          }
+        })
         .start();
   }
 
@@ -61,6 +63,7 @@ public class LogWatcher {
   }
 
   public interface Listener {
+
     void notify(String log);
   }
 }

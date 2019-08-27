@@ -16,6 +16,12 @@ body {
 #native {
   display: none;
   border-left: 2px solid lightgray;
+  border-left: 2px solid black;
+}
+
+#view-switch-container {
+  margin-left: 10px;
+  margin-right: -10px;
 }
 
 form label {
@@ -49,11 +55,6 @@ label[for="query-select"] {
   line-height: 2.3;
 }
 
-#query-select {
-  margin-left: 15px;
-  margin-right: -15px;
-}
-
 #db-postgresql {
   padding-left: 0;
 }
@@ -62,14 +63,6 @@ label[for="query-select"] {
   font-size: 9pt;
   margin-left: 20px;
   margin-right: -20px;
-}
-
-div#layout {
-/*  text-align: center;*/
-}
-
-.time {
-  display: none;
 }
 
 .chart {
@@ -85,7 +78,6 @@ svg {
 }
 
 .bar {
-/*  fill: #80cbc4;*/
   fill: #2F4A6D;
   cursor: pointer;
 }
@@ -100,7 +92,6 @@ text.value {
 
 text {
   font-size: 12px;
-/*  fill: #fff;*/
 }
 
 path {
@@ -147,4 +138,20 @@ text.label {
 
 text.source {
   font-size: 10px;
+}
+
+.form-control {
+  border-color: black;
+}
+
+.custom-control-label::before {
+  border-color: black;
+}
+
+.custom-switch .custom-control-label::after {
+  background-color: black;
+}
+
+.table td {
+  border-color: black;
 }
