@@ -27,3 +27,4 @@ target/
 *.iml
 node_modules/
 package-lock.json
+dependency-reduced-pom.xml
