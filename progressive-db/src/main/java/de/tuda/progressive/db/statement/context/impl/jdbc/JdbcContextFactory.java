@@ -112,9 +112,7 @@ public class JdbcContextFactory
     final List<MetaField> metaFields =
         getMetaFields(context.getMetaFields(), transformed.getRight());
     final SqlSelect selectBuffer = transformed.getLeft();
-    final Map<Integer, Pair<Integer, Integer>> bounds =
-        getBounds(
-            context::getFieldIndex, metaFields, context::getBound, selectBuffer.getSelectList());
+    final Map<Integer, Pair<Integer, Integer>> bounds = dataBuffer.getContext().getBounds();
 
     return new JdbcSourceContext.Builder()
         .metaFields(metaFields)
@@ -145,7 +143,8 @@ public class JdbcContextFactory
           getCreateBuffer(metaData, bufferFieldNames, bufferTableName, indexColumns);
       final SqlSelect selectBuffer =
           getSelectBuffer(
-              select, bufferFieldNames, bufferTableName, fieldNames, metaFields, select.getWhere());
+              select, bufferFieldNames, bufferTableName, fieldNames, metaFields, select.getWhere(),
+              true);
 
       return builder(bufferFieldNames, bufferTableName, indexColumns)
           .createBuffer(createBuffer)
@@ -237,7 +236,9 @@ public class JdbcContextFactory
         final SqlIdentifier columnIdentifier = node.operand(0);
         Column column;
         if (columnIdentifier.names.size() == 1) {
-          column = tables.stream().map(columnMapper).filter(Objects::nonNull).findAny().get();
+          column = tables.stream()
+              .map(t -> SqlUtils.getIdentifier(t.getSimple(), columnIdentifier.getSimple()))
+              .map(columnMapper).filter(Objects::nonNull).findAny().get();
         } else {
           column = columnMapper.apply(columnIdentifier);
         }
@@ -545,7 +546,7 @@ public class JdbcContextFactory
       List<SqlIdentifier> fieldNames,
       List<MetaField> metaFields) {
     return getSelectBuffer(
-        originalSelect, bufferFieldNames, bufferTableName, fieldNames, metaFields, null);
+        originalSelect, bufferFieldNames, bufferTableName, fieldNames, metaFields, null, false);
   }
 
   private SqlSelect getSelectBuffer(
@@ -554,7 +555,8 @@ public class JdbcContextFactory
       String bufferTableName,
       List<SqlIdentifier> fieldNames,
       List<MetaField> metaFields,
-      SqlNode where) {
+      SqlNode where,
+      boolean view) {
     final SqlNodeList selectList = new SqlNodeList(SqlParserPos.ZERO);
     final SqlNodeList groupBy = new SqlNodeList(SqlParserPos.ZERO);
 
@@ -573,10 +575,12 @@ public class JdbcContextFactory
           groupBy.add(identifier);
           break;
         case AVG:
+          final SqlIdentifier id1 = SqlUtils.getIdentifier(bufferFieldNames.get(i));
+          final SqlIdentifier id2 = SqlUtils.getIdentifier(bufferFieldNames.get(i + 1));
           newColumn =
               SqlUtils.createAvgAggregation(
-                  SqlUtils.getIdentifier(bufferFieldNames.get(i)),
-                  SqlUtils.getIdentifier(bufferFieldNames.get(i + 1)));
+                  view ? SqlUtils.createSumAggregation(id1) : id1,
+                  view ? SqlUtils.createSumAggregation(id2) : id2);
           i += 2;
           break;
         case COUNT:
@@ -596,9 +600,8 @@ public class JdbcContextFactory
           i++;
           break;
         case CONFIDENCE_INTERVAL:
-          newColumn =
-              SqlUtils.createCast(
-                  SqlUtils.getIdentifier(bufferFieldNames.get(i++)), SqlTypeName.FLOAT);
+          final SqlIdentifier id = SqlUtils.getIdentifier(bufferFieldNames.get(i++));
+          newColumn = SqlUtils.createCast(view ? SqlUtils.createSumAggregation(id) : id, SqlTypeName.FLOAT);
           break;
         default:
           throw new IllegalArgumentException("metaField not handled: " + metaField);

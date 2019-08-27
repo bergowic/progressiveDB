@@ -1,10 +1,26 @@
 package de.tuda.progressive.db;
 
 import de.tuda.progressive.db.exception.ProgressiveException;
-import de.tuda.progressive.db.sql.parser.*;
+import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlDropProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlParserImpl;
+import de.tuda.progressive.db.sql.parser.SqlPrepareTable;
+import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.ProgressiveStatement;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Optional;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.function.Function;
 import org.apache.calcite.avatica.MissingResultsException;
 import org.apache.calcite.avatica.NoSuchStatementException;
+import org.apache.calcite.avatica.QueryState;
 import org.apache.calcite.avatica.jdbc.JdbcMeta;
 import org.apache.calcite.avatica.jdbc.StatementInfo;
 import org.apache.calcite.avatica.metrics.MetricsSystem;
@@ -16,13 +32,6 @@ import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.function.Function;
 
 public class ProgressiveMeta extends JdbcMeta {
 
@@ -85,21 +94,22 @@ public class ProgressiveMeta extends JdbcMeta {
   @Override
   public StatementHandle prepare(ConnectionHandle ch, String sql, long maxRowCount) {
     return prepareProgressiveStatement(
-            sql,
-            statement -> {
-              try {
-                StatementHandle handle =
-                    new StatementHandle(
-                        ch.id,
-                        getStatementIdGenerator().getAndIncrement(),
-                        signature(statement.getMetaData()));
-                addStatement(handle.id, statement);
+        ch.id,
+        sql,
+        statement -> {
+          try {
+            StatementHandle handle =
+                new StatementHandle(
+                    ch.id,
+                    getStatementIdGenerator().getAndIncrement(),
+                    signature(statement.getMetaData()));
+            addStatement(handle.id, statement);
 
-                return handle;
-              } catch (SQLException e) {
-                throw new RuntimeException(e);
-              }
-            })
+            return handle;
+          } catch (SQLException e) {
+            throw new RuntimeException(e);
+          }
+        })
         .orElseGet(() -> super.prepare(ch, sql, maxRowCount));
   }
 
@@ -146,7 +156,7 @@ public class ProgressiveMeta extends JdbcMeta {
   @Override
   public Frame fetch(StatementHandle h, long offset, int fetchMaxRowCount)
       throws NoSuchStatementException, MissingResultsException {
-    ProgressiveStatement statement = statements.get(h.id);
+    final ProgressiveStatement statement = statements.get(h.id);
     if (statement == null) {
       return super.fetch(h, offset, fetchMaxRowCount);
     }
@@ -162,7 +172,7 @@ public class ProgressiveMeta extends JdbcMeta {
 
   @Override
   public void closeStatement(StatementHandle h) {
-    ProgressiveStatement statement = statements.get(h.id);
+    final ProgressiveStatement statement = statements.get(h.id);
     if (statement == null) {
       super.closeStatement(h);
     } else {
@@ -192,11 +202,12 @@ public class ProgressiveMeta extends JdbcMeta {
     assertStatementExists(h);
 
     return prepareProgressiveStatement(
-            sql,
-            statement -> {
-              addStatement(h.id, statement);
-              return execute(h, statement);
-            })
+        h.connectionId,
+        sql,
+        statement -> {
+          addStatement(h.id, statement);
+          return execute(h, statement);
+        })
         .orElse(null);
   }
 
@@ -241,6 +252,7 @@ public class ProgressiveMeta extends JdbcMeta {
   }
 
   private <T> Optional<T> prepareProgressiveStatement(
+      String connectionId,
       String sql, Function<ProgressiveStatement, T> success) {
     SqlNode node = parse(sql);
     ProgressiveStatement statement;
@@ -254,19 +266,29 @@ public class ProgressiveMeta extends JdbcMeta {
       }
     }
 
+    final Connection connection = getConnectionSafe(connectionId);
+
     if (node instanceof SqlPrepareTable) {
-      statement = progressiveHandler.handle((SqlPrepareTable) node);
+      statement = progressiveHandler.handle(connection, (SqlPrepareTable) node);
     } else if (node instanceof SqlCreateProgressiveView) {
-      statement = progressiveHandler.handle((SqlCreateProgressiveView) node);
+      statement = progressiveHandler.handle(connection, (SqlCreateProgressiveView) node);
     } else if (node instanceof SqlDropProgressiveView) {
-      statement = progressiveHandler.handle((SqlDropProgressiveView) node);
+      statement = progressiveHandler.handle(connection, (SqlDropProgressiveView) node);
     } else if (node instanceof SqlSelectProgressive) {
-      statement = progressiveHandler.handle((SqlSelectProgressive) node);
+      statement = progressiveHandler.handle(connection, (SqlSelectProgressive) node);
     } else {
       return Optional.empty();
     }
 
     return Optional.of(success.apply(statement));
+  }
+
+  private Connection getConnectionSafe(String connectionId) {
+    try {
+      return getConnection(connectionId);
+    } catch (SQLException e) {
+      throw new ProgressiveException(e);
+    }
   }
 
   private SqlNode parse(String sql) {

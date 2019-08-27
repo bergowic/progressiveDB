@@ -174,8 +174,6 @@ public class ProgressiveDbServer {
 		if (server == null) {
 			log.info("starting");
 
-			Connection connection = DriverManager.getConnection(sourceUrl, sourceProperties);
-
 			final DbDriver sourceDriver = DbDriverFactory.create(sourceUrl);
 			final DbDriver bufferDriver = DbDriverFactory.create(tmpUrl);
 			final BaseContextFactory contextFactory = createContextFactory(sourceDriver, bufferDriver);
@@ -184,7 +182,6 @@ public class ProgressiveDbServer {
 
 			final ProgressiveHandler progressiveHandler = new ProgressiveHandler(
 					DbDriverFactory.create(sourceUrl),
-					connection,
 					metaData,
 					contextFactory,
 					dataBufferFactory

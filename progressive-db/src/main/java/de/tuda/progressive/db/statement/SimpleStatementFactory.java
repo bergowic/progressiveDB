@@ -3,29 +3,34 @@ package de.tuda.progressive.db.statement;
 import de.tuda.progressive.db.buffer.DataBuffer;
 import de.tuda.progressive.db.buffer.DataBufferFactory;
 import de.tuda.progressive.db.buffer.SelectDataBuffer;
+import de.tuda.progressive.db.buffer.impl.JdbcDataBuffer;
 import de.tuda.progressive.db.driver.DbDriver;
 import de.tuda.progressive.db.meta.MetaData;
 import de.tuda.progressive.db.model.Column;
 import de.tuda.progressive.db.model.Partition;
 import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.sql.parser.SqlCreateProgressiveView;
+import de.tuda.progressive.db.sql.parser.SqlDropProgressiveView;
 import de.tuda.progressive.db.sql.parser.SqlPrepareTable;
 import de.tuda.progressive.db.sql.parser.SqlSelectProgressive;
 import de.tuda.progressive.db.statement.context.impl.BaseContext;
 import de.tuda.progressive.db.statement.context.impl.BaseContextFactory;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
-import org.apache.calcite.sql.*;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.sql.Connection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
+import org.apache.calcite.sql.SqlIdentifier;
+import org.apache.calcite.sql.SqlJoin;
+import org.apache.calcite.sql.SqlNode;
+import org.apache.calcite.sql.SqlOrderBy;
+import org.apache.calcite.sql.SqlSelect;
+import org.apache.commons.lang3.tuple.ImmutablePair;
+import org.apache.commons.lang3.tuple.Pair;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class SimpleStatementFactory implements ProgressiveStatementFactory {
 
@@ -112,7 +117,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
     assertValid(select);
 
     final SqlIdentifier view = createProgressiveView.getName();
-    final String viewName = view.getSimple().toUpperCase();
+    final String viewName = normalizeViewName(view);
     final JdbcSourceContext context =
         contextFactory.create(connection, createProgressiveView, columnMapper);
 
@@ -130,7 +135,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
     }
 
     final SqlIdentifier from = (SqlIdentifier) select.getFrom();
-    return viewStatements.get(from.getSimple().toUpperCase());
+    return viewStatements.get(normalizeViewName(from));
   }
 
   private PartitionInfo getJoinInfo(SqlSelect select) {
@@ -199,6 +204,32 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
           throw new IllegalArgumentException("join type not supported: " + join.getJoinType());
       }
     }
+  }
+
+  private String normalizeViewName(SqlIdentifier view) {
+    return view.getSimple().toUpperCase();
+  }
+
+  @Override
+  public ProgressiveStatement prepare(Connection connection,
+      SqlDropProgressiveView dropProgressiveView) {
+    final String viewName = normalizeViewName(dropProgressiveView.getName());
+
+    if (!viewStatements.containsKey(viewName) && !dropProgressiveView.isIfExists()) {
+      throw new IllegalArgumentException("view does not exists: " + dropProgressiveView.getName());
+    }
+
+    final ProgressiveViewStatement statement = viewStatements.get(viewName);
+    if (statement != null) {
+      // TODO should not be executed immediately
+      statement.close();
+      viewStatements.remove(viewName);
+    }
+
+    // TODO dont rely on JdbcDataBuffer
+    return new DropViewStatement(driver,
+        ((JdbcDataBuffer) statement.getDataBuffer()).getConnection(), viewName,
+        dropProgressiveView.isIfExists());
   }
 
   @Override
