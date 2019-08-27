@@ -6,11 +6,12 @@
 
     <groupId>de.tuda.progressive.db</groupId>
     <artifactId>progressive-db</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
 
     <properties>
         <java.version>1.8</java.version>
         <templates.path>codegen/templates</templates.path>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
         <!-- dependencies -->
         <calcite.version>1.17.0</calcite.version>

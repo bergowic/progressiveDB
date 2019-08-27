@@ -88,7 +88,7 @@ public class JdbcSelectDataBuffer<C extends BaseContext> implements SelectDataBu
 
     try (ResultSet resultSet = selectBuffer.executeQuery()) {
       while (resultSet.next()) {
-        Object[] row = new Object[selectBuffer.getMetaData().getColumnCount()];
+        Object[] row = new Object[resultSet.getMetaData().getColumnCount()];
         for (int i = 1; i <= row.length; i++) {
           if (metaFields.get(i - 1) == MetaField.CONFIDENCE_INTERVAL) {
             final double count = resultSet.getDouble(i);

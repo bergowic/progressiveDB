@@ -42,7 +42,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
 
   private final MetaData metaData;
 
-  private final Function<Pair<String, String>, Column> columnMapper;
+  private final Function<SqlIdentifier, Column> columnMapper;
 
   private final BaseContextFactory contextFactory;
 
@@ -66,7 +66,7 @@ public class SimpleStatementFactory implements ProgressiveStatementFactory {
     assertValid(select);
 
     final ProgressiveViewStatement viewStatement = getProgressiveView(select);
-    final Function<Pair<String, String>, Column> columnMapper = metaData::getColumn;
+    final Function<SqlIdentifier, Column> columnMapper = metaData::getColumn;
 
     if (viewStatement == null) {
       log.info("no view found");

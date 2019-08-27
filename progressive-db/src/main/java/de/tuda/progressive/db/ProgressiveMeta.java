@@ -181,6 +181,17 @@ public class ProgressiveMeta extends JdbcMeta {
     }
   }
 
+  @Override
+  public boolean syncResults(StatementHandle h, QueryState state, long offset)
+      throws NoSuchStatementException {
+    final ProgressiveStatement statement = statements.get(h.id);
+    if (statement == null) {
+      return super.syncResults(h, state, offset);
+    } else {
+      return false;
+    }
+  }
+
   private void assertStatementExists(StatementHandle h) throws NoSuchStatementException {
     final StatementInfo info = getStatementCache().getIfPresent(h.id);
     if (info == null) {
