@@ -6,6 +6,9 @@ import de.tuda.progressive.db.exception.ProgressiveException;
 import de.tuda.progressive.db.model.PartitionInfo;
 import de.tuda.progressive.db.statement.context.impl.JdbcSourceContext;
 import de.tuda.progressive.db.util.SqlUtils;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -18,10 +21,21 @@ import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 import org.apache.calcite.sql.SqlIdentifier;
 import org.apache.calcite.sql.SqlSelect;
+import org.eclipse.jetty.util.IO;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
+
+  private static FileWriter writer;
+
+  static {
+    try {
+      writer = new FileWriter(new File(System.getProperty("user.home") + "/progressive-db.log"));
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
 
   private static final Logger log = LoggerFactory.getLogger(ProgressiveBaseStatement.class);
 
@@ -101,8 +115,10 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
               query();
             }
           } catch (Throwable t) {
-            // TODO
-            t.printStackTrace();
+            if (!isClosed) {
+              // TODO
+              t.printStackTrace();
+            }
           }
         });
   }
@@ -133,6 +149,14 @@ public abstract class ProgressiveBaseStatement implements ProgressiveStatement {
 
       if (log.isInfoEnabled()) {
         log.info("next statement {}", preparedStatement.toString().replaceAll("\\r\\n", " "));
+      }
+
+      try {
+        writer.write(preparedStatement.toString().replaceAll("\\r\\n", " ").replaceAll("\\n", " "));
+        writer.write('\n');
+        writer.flush();
+      } catch (IOException e) {
+        e.printStackTrace();
       }
 
       return preparedStatement.executeQuery();

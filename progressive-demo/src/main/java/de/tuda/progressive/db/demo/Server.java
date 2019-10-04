@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,6 +46,10 @@ public class Server extends WebSocketServer {
   private Statement consoleStatement;
   private Statement consoleViewStatement;
 
+  private final Properties progressiveProps;
+
+  private final Properties nativeProps;
+
   private final LogWatcher logWatcher;
 
   private final List<String> appLogs = new ArrayList<>();
@@ -53,10 +58,12 @@ public class Server extends WebSocketServer {
 
   private int queryId;
 
-  public Server(LogWatcher logWatcher) {
+  public Server(Properties progressiveProps, Properties nativeProps, LogWatcher logWatcher) {
     super(new InetSocketAddress(8081));
 
     setReuseAddr(true);
+    this.progressiveProps = progressiveProps;
+    this.nativeProps = nativeProps;
     this.logWatcher = logWatcher;
   }
 
@@ -78,11 +85,10 @@ public class Server extends WebSocketServer {
       ensureConnection(false);
     } else if (webSocket.getResourceDescriptor().endsWith("console")) {
       try {
-        consoleConnection = DriverManager
-            .getConnection("jdbc:avatica:remote:url=http://localhost:1337");
+        consoleConnection = DriverManager.getConnection(progressiveProps.getProperty("url"), progressiveProps);
         consoleViewStatement = consoleConnection.createStatement();
         consoleViewStatement.execute(
-            "create progressive view pv as select progressive_confidence(depdelay), avg(depdelay) depdelay, dayofweek future, progressive_partition(), progressive_progress() from ontime1m where (origin = 'ATL') future or (origin = 'JFK') future or (origin = 'LAX') future group by dayofweek future");
+            "create progressive view pv as select avg(depdelay) depdelay, dayofweek future, progressive_partition(), progressive_progress() from ontime1m where (origin = 'ATL') future or (origin = 'JFK') future or (origin = 'LAX') future group by dayofweek future");
       } catch (SQLException e) {
         e.printStackTrace();
       }
@@ -166,12 +172,11 @@ public class Server extends WebSocketServer {
   }
 
   private Connection getNativeConnection() throws SQLException {
-    return DriverManager
-        .getConnection("jdbc:postgresql://localhost:5432/progressive", "postgres", "postgres");
+    return DriverManager.getConnection(nativeProps.getProperty("url"), nativeProps);
   }
 
   private Connection getProgressiveConnection() throws SQLException {
-    return DriverManager.getConnection("jdbc:avatica:remote:url=http://localhost:1337");
+    return DriverManager.getConnection(progressiveProps.getProperty("url"), progressiveProps);
   }
 
   private void ensureConnection(boolean progressive) {
@@ -239,7 +244,7 @@ public class Server extends WebSocketServer {
           + (progressive
           ? ", progressive_partition(), progressive_progress(), progressive_confidence(depdelay)"
           : "")
-          + " from ontime1m where ";
+          + " from ontime1m" + (progressive ? "" : "_partition") + " where ";
 
       if (time != null) {
         switch (queryId) {
@@ -334,7 +339,7 @@ public class Server extends WebSocketServer {
           }
       }
 
-      sql += " from ontime1m where ";
+      sql += " from ontime1m" + (progressive ? "" : "_partition") + " where ";
 
       if (origin != null || time != null) {
         sql += "(";
